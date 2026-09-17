@@ -2360,19 +2360,6 @@ export default function WorkPackerApp() {
           <i className="fa-solid fa-calendar-days text-lg"></i>
           <span className="text-[10px]">Horarios</span>
         </button>
-
-        <button
-          onClick={() => {
-            setActiveTab('settings');
-            syncToDatabase({ settings: { darkMode, vacationMode, scheduleMode, activeTab: 'settings', scheduleSettings: schedule } });
-          }}
-          className={`flex flex-col items-center gap-1 transition ${
-            activeTab === 'settings' ? 'text-blue-600 font-semibold' : 'text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          <i className="fa-solid fa-gear text-lg"></i>
-          <span className="text-[10px]">Ajustes</span>
-        </button>
       </nav>
     </div>
   );
