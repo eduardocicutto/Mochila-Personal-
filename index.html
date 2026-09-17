@@ -1,0 +1,2341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkPacker - Recordatorio para el Trabajo</title>
+
+    <!-- Meta etiquetas para habilitar Modo Pantalla Completa / Web App -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="WorkPacker">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW Registration error: ', err));
+            });
+        }
+    </script>
+
+    <script>
+        tailwind = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            overscroll-behavior-y: none;
+            overscroll-behavior-x: none;
+            height: 100%;
+            overflow: hidden;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f4f6fb;
+            -webkit-tap-highlight-color: transparent;
+        }
+        main {
+            overscroll-behavior-y: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.02);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+        }
+        .app-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        .glass-header {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(16px);
+        }
+        /* Presets de degradados */
+        .grad-peach { background: linear-gradient(135deg, #ffe5d9 0%, #fec89a 100%); color: #9a3412; }
+        .grad-mint { background: linear-gradient(135deg, #d8f3dc 0%, #b7e4c7 100%); color: #166534; }
+        .grad-sky { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; }
+        .grad-lavender { background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); color: #6b21a8; }
+        .grad-rose { background: linear-gradient(135deg, #ffe4e6 0%, #fecdd3 100%); color: #9f1239; }
+        .grad-amber { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; }
+        .grad-teal { background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%); color: #115e59; }
+        
+        .tab-active {
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        /* Estilos para Modo Oscuro */
+        .dark-mode {
+            background-color: #0f172a !important;
+            color: #f8fafc !important;
+        }
+        .dark-mode .glass-header {
+            background: rgba(15, 23, 42, 0.88) !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+        }
+        .dark-mode .app-card, 
+        .dark-mode .bg-white {
+            background-color: #1e293b !important;
+            border-color: rgba(255, 255, 255, 0.08) !important;
+            color: #f8fafc !important;
+        }
+        .dark-mode input, .dark-mode select {
+            background-color: #0f172a !important;
+            color: #f8fafc !important;
+            border-color: #334155 !important;
+        }
+        .dark-mode .bg-slate-100 {
+            background-color: #334155 !important;
+            color: #f8fafc !important;
+        }
+        .dark-mode .bg-slate-200, .dark-mode .bg-slate-200\/80 {
+            background-color: #334155 !important;
+            color: #f8fafc !important;
+        }
+        .dark-mode .text-slate-800, .dark-mode .text-slate-700, .dark-mode .text-slate-600 {
+            color: #e2e8f0 !important;
+        }
+        .dark-mode .text-slate-500, .dark-mode .text-slate-400 {
+            color: #94a3b8 !important;
+        }
+        .dark-mode .border-slate-100, .dark-mode .border-slate-200, .dark-mode .border-slate-200\/80 {
+            border-color: #334155 !important;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex justify-center items-center p-0 md:p-4">
+
+    <div id="app" x-data="workPackerApp()" :class="darkMode ? 'dark-mode' : ''" class="w-full max-w-md h-[100vh] md:h-[840px] bg-slate-50 md:rounded-3xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200/80">
+        
+        <!-- Header -->
+        <header class="glass-header px-5 py-4 border-b border-slate-100 flex items-center justify-between z-10 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                    <i class="fa-solid fa-briefcase text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-800 leading-tight">WorkPacker</h1>
+                    <p class="text-xs text-slate-500 font-medium" x-text="getTodayFormatted()"></p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <!-- Botón de Modo Oscuro / Claro -->
+                <button @click="toggleDarkMode()" :title="darkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'" :class="darkMode ? 'bg-slate-800 text-amber-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="w-9 h-9 rounded-full flex items-center justify-center transition">
+                    <i :class="darkMode ? 'fa-solid fa-sun' : 'fa-solid fa-moon'" class="text-sm"></i>
+                </button>
+                <button @click="activeTab = 'settings'" title="Ajustes" :class="activeTab === 'settings' ? 'bg-blue-100 text-blue-600' : (darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')" class="w-9 h-9 rounded-full flex items-center justify-center transition">
+                    <i class="fa-solid fa-gear text-sm"></i>
+                </button>
+                <button @click="triggerSimulatedNotification()" title="Probar notificación" :class="darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'" class="w-9 h-9 rounded-full flex items-center justify-center transition">
+                    <i class="fa-regular fa-bell text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Toast Notification Simulation -->
+        <div x-show="toast.visible" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 -translate-y-4"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 translate-y-0"
+             x-transition:leave-end="opacity-0 -translate-y-4"
+             class="absolute top-16 left-4 right-4 z-50 bg-slate-900 text-white rounded-2xl p-4 shadow-xl flex items-start gap-3 border border-slate-800"
+             style="display: none;">
+            <div class="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                <i class="fa-solid fa-bell"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="font-semibold text-xs text-blue-300 uppercase tracking-wider" x-text="toast.title"></h4>
+                <p class="text-sm mt-0.5 text-slate-200 leading-snug" x-text="toast.message"></p>
+            </div>
+            <button @click="toast.visible = false" class="text-slate-400 hover:text-white text-xs">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Main Content Scroll Area -->
+        <main class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+
+            <!-- TAB 1: PANTALLA PRINCIPAL (HOY Y MAÑANA) -->
+            <div x-show="activeTab === 'home'" class="space-y-5">
+                
+                <!-- Card de Estado de Trabajo -->
+                <div class="bg-gradient-to-br from-indigo-600 via-blue-600 to-sky-500 text-white rounded-3xl p-5 shadow-lg shadow-blue-500/15 relative overflow-hidden">
+                    <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
+                    
+                    <div class="flex justify-between items-start mb-3 relative z-10">
+                        <span class="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-md" x-text="vacationMode ? '🏖️ Modo Vacaciones' : (isWorkDayToday() ? '¡Hoy se trabaja!' : 'Mañana se trabaja')"></span>
+                        <div class="text-right">
+                            <p class="text-xs text-blue-100">Próximo turno</p>
+                            <p class="text-sm font-bold" x-text="schedule.startTime + ' - ' + schedule.endTime"></p>
+                        </div>
+                    </div>
+
+                    <h2 class="text-xl font-bold mb-1 relative z-10">¿Qué llevar en la mochila?</h2>
+                    <p class="text-xs text-blue-100 mb-4 relative z-10">Revisa tus cosas esenciales antes de salir de casa.</p>
+
+                    <!-- Progreso -->
+                    <div class="space-y-1.5 relative z-10">
+                        <div class="flex justify-between text-xs font-medium">
+                            <span x-text="getPackedCount() + ' de ' + getFilteredItems().length + ' objetos empacados'"></span>
+                            <span x-text="getPackedPercentage() + '%'"></span>
+                        </div>
+                        <div class="w-full bg-black/20 rounded-full h-2 overflow-hidden">
+                            <div class="bg-white h-2 rounded-full transition-all duration-500" :style="'width: ' + getPackedPercentage() + '%'"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MÓDULOS DE PREGUNTAS Y OPCIONES (COCINA, HERRAMIENTAS Y PERSONALIZADOS) -->
+                <template x-for="mod in customModules" :key="mod.id">
+                    <div x-show="mod.enabled" class="app-card rounded-3xl p-4 shadow-sm border border-slate-200/60">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm font-bold" :class="mod.colorClass || 'grad-sky'">
+                                    <i :class="mod.icon || 'fa-solid fa-cube'"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-slate-800" x-text="mod.title"></h3>
+                                    <p class="text-xs text-slate-500" x-text="mod.subtitle"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <template x-for="opt in mod.options" :key="opt.id">
+                                <button x-show="opt.enabled !== false"
+                                        @click="selectModuleOption(mod, opt.id)"
+                                        :class="mod.selectedOption === opt.id ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 border-blue-600' : 'bg-slate-100 text-slate-600 border-transparent hover:bg-slate-200'"
+                                        class="py-2.5 px-2 rounded-2xl border text-xs font-semibold flex flex-col items-center gap-1 transition">
+                                    <i :class="opt.icon || 'fa-solid fa-circle-check'" class="text-base"></i>
+                                    <span x-text="opt.name"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Checklist Interactiva -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Lista de Chequeo</h3>
+                        <button @click="resetChecklist()" class="text-xs text-blue-600 font-semibold hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-rotate-left"></i> Desmarcar todo
+                        </button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <template x-for="item in getFilteredItems()" :key="item.id">
+                            <div @click="toggleItemPacked(item.id)" 
+                                 class="app-card p-3.5 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98] border"
+                                 :class="item.packed ? 'bg-slate-100/70 border-slate-200 opacity-60' : 'bg-white border-slate-200/80 shadow-sm hover:border-blue-200'">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-11 h-11 rounded-2xl flex items-center justify-center text-lg shrink-0 shadow-sm"
+                                         :class="item.gradientClass">
+                                        <i :class="item.icon"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-semibold text-slate-800 text-sm" :class="{'line-through text-slate-400': item.packed}" x-text="item.name"></h4>
+                                        <span class="text-[11px] font-medium text-slate-400 px-2 py-0.5 rounded-full bg-slate-100 inline-block mt-0.5" x-text="getCategoryLabel(item.category)"></span>
+                                    </div>
+                                </div>
+
+                                <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition"
+                                     :class="item.packed ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 text-transparent'">
+                                    <i class="fa-solid fa-check text-xs"></i>
+                                </div>
+                            </div>
+                        </template>
+
+                        <div x-show="getFilteredItems().length === 0" class="text-center py-8 text-slate-400">
+                            <i class="fa-solid fa-box-open text-3xl mb-2 opacity-50"></i>
+                            <p class="text-xs">No hay objetos para esta combinación.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 2: GESTOR DE OBJETOS -->
+            <div x-show="activeTab === 'items'" class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800">Mis Objetos y Cosas</h2>
+                        <p class="text-xs text-slate-500">Agrega, edita o elimina elementos</p>
+                    </div>
+                    <button @click="openModalToAdd()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-2xl text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition">
+                        <i class="fa-solid fa-plus text-xs"></i> Agregar
+                    </button>
+                </div>
+
+                <!-- Filtros por categoría -->
+                <div class="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
+                    <button @click="itemFilterCategory = 'all'" :class="itemFilterCategory === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'" class="px-3 py-1.5 rounded-xl font-medium shrink-0 transition">Todos</button>
+                    <template x-for="cat in getAllCategories()" :key="cat.id">
+                        <button @click="itemFilterCategory = cat.id" 
+                                :class="itemFilterCategory === cat.id ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200'" 
+                                class="px-3 py-1.5 rounded-xl font-medium shrink-0 transition" 
+                                x-text="cat.name"></button>
+                    </template>
+                </div>
+
+                <!-- Lista de Objetos Existentes -->
+                <div class="space-y-2.5">
+                    <template x-for="item in catalogItems" :key="item.id">
+                        <div x-show="itemFilterCategory === 'all' || item.category === itemFilterCategory || (itemFilterCategory === 'tools' && item.category.startsWith('tools'))" 
+                             class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-base shrink-0 shadow-sm" :class="item.gradientClass">
+                                    <i :class="item.icon"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-slate-800 text-sm" x-text="item.name"></h4>
+                                    <p class="text-[11px] text-slate-400" x-text="getCategoryLabel(item.category)"></p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-1">
+                                <button @click="openModalToEdit(item)" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs transition">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button @click="deleteItem(item.id)" class="w-8 h-8 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- TAB 3: CONFIGURACIÓN DE DÍAS Y HORARIOS -->
+            <div x-show="activeTab === 'schedule'" class="space-y-5">
+                <div>
+                    <h2 class="text-base font-bold text-slate-800">Días y Horarios de Trabajo</h2>
+                    <p class="text-xs text-slate-500">Administra múltiples turnos o planifica tu calendario mensual</p>
+                </div>
+
+                <!-- Selector de Modo -->
+                <div class="bg-slate-200/80 p-1 rounded-2xl flex text-xs font-semibold">
+                    <button @click="scheduleMode = 'weekly'" 
+                            :class="scheduleMode === 'weekly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'" 
+                            class="flex-1 py-2 rounded-xl transition text-center flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-list-check"></i>
+                        <span>Turnos Semanales</span>
+                    </button>
+                    <button @click="scheduleMode = 'calendar'" 
+                            :class="scheduleMode === 'calendar' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'" 
+                            class="flex-1 py-2 rounded-xl transition text-center flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-calendar-days"></i>
+                        <span>Vista Calendario</span>
+                    </button>
+                </div>
+
+                <!-- MODO 1: TURNOS SEMANALES -->
+                <div x-show="scheduleMode === 'weekly'" class="space-y-5">
+                    
+                    <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider" x-text="isEditingSchedule ? 'Editar Turno' : 'Añadir Nuevo Turno / Horario'"></h3>
+                            <button x-show="isEditingSchedule" @click="resetScheduleForm()" class="text-xs text-slate-400 hover:text-slate-600 underline">Cancelar edición</button>
+                        </div>
+
+                        <div>
+                            <label class="text-[11px] text-slate-500 block mb-1">Nombre del Turno / Rotación</label>
+                            <input type="text" x-model="formSchedule.name" placeholder="Ej: Turno Mañana, Guardia Fin de Semana..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500">
+                        </div>
+
+                        <div>
+                            <label class="text-[11px] text-slate-500 block mb-1">Días Laborales de este Turno</label>
+                            <div class="grid grid-cols-7 gap-1">
+                                <template x-for="(day, index) in weekDays" :key="index">
+                                    <button type="button" 
+                                            @click="toggleFormWorkDay(index)" 
+                                            :class="formSchedule.workDays.includes(index) ? 'bg-blue-600 text-white shadow-sm font-bold' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+                                            class="py-2.5 rounded-xl text-xs font-semibold transition">
+                                        <span x-text="day.short"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                                <label class="text-[11px] text-slate-500 block mb-1">Hora de Entrada</label>
+                                <input type="time" x-model="formSchedule.startTime" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="text-[11px] text-slate-500 block mb-1">Hora de Salida</label>
+                                <input type="time" x-model="formSchedule.endTime" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-[11px] text-slate-500 block mb-1">Color del Turno</label>
+                            <div class="flex gap-2">
+                                <template x-for="grad in gradientPresets" :key="grad.class">
+                                    <button type="button" 
+                                            @click="formSchedule.colorClass = grad.class"
+                                            :class="[grad.class, formSchedule.colorClass === grad.class ? 'ring-2 ring-blue-600 ring-offset-1' : '']"
+                                            class="w-7 h-7 rounded-xl shadow-xs transition shrink-0"></button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <button @click="saveSchedule()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-2xl text-xs shadow-md shadow-blue-500/20 transition mt-2 flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-plus text-xs"></i>
+                            <span x-text="isEditingSchedule ? 'Guardar Cambios del Turno' : 'Guardar y Añadir a la Lista'"></span>
+                        </button>
+                    </div>
+
+                    <!-- Lista de Turnos Guardados -->
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Turnos Guardados (<span x-text="savedSchedules.length"></span>)</h3>
+                            <span class="text-[10px] text-slate-400">Puedes activar varios simultáneamente</span>
+                        </div>
+
+                        <div class="space-y-2.5">
+                            <template x-for="sch in savedSchedules" :key="sch.id">
+                                <div class="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-sm space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2.5">
+                                            <div class="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shadow-xs shrink-0" :class="sch.colorClass">
+                                                <i class="fa-solid fa-clock"></i>
+                                            </div>
+                                            <div>
+                                                <h4 class="font-bold text-slate-800 text-xs" x-text="sch.name"></h4>
+                                                <p class="text-[11px] font-semibold text-slate-500" x-text="sch.startTime + ' - ' + sch.endTime"></p>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex items-center gap-2">
+                                            <button @click="toggleScheduleActive(sch.id)" 
+                                                    :class="sch.active ? 'bg-emerald-500' : 'bg-slate-300'"
+                                                    class="w-10 h-6 rounded-full p-0.5 transition duration-200 flex items-center">
+                                                <div :class="sch.active ? 'translate-x-4' : 'translate-x-0'" class="w-5 h-5 bg-white rounded-full shadow-md transition duration-200"></div>
+                                            </button>
+                                            <button @click="editSchedule(sch)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs transition">
+                                                <i class="fa-solid fa-pen"></i>
+                                            </button>
+                                            <button @click="deleteSchedule(sch.id)" class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition">
+                                                <i class="fa-solid fa-trash text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex gap-1 pt-1 border-t border-slate-100">
+                                        <template x-for="(day, idx) in weekDays" :key="idx">
+                                            <span x-text="day.short" 
+                                                  :class="sch.workDays.includes(idx) ? 'bg-blue-100 text-blue-700 font-bold' : 'bg-slate-100 text-slate-300'" 
+                                                  class="w-6 h-6 rounded-lg flex items-center justify-center text-[10px]"></span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <div x-show="savedSchedules.length === 0" class="text-center py-6 text-slate-400 bg-white rounded-2xl border border-slate-200/60 p-4">
+                                <i class="fa-regular fa-calendar-xmark text-2xl mb-1 opacity-40"></i>
+                                <p class="text-xs">No tienes turnos creados aún.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODO 2: CALENDARIO MENSUAL -->
+                <div x-show="scheduleMode === 'calendar'" class="space-y-4">
+                    <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+                        <div class="flex justify-between items-center">
+                            <button @click="changeCalMonth(-1)" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 text-xs transition">
+                                <i class="fa-solid fa-chevron-left"></i>
+                            </button>
+                            <h3 class="font-bold text-sm text-slate-800 capitalize" x-text="getCalMonthYearLabel()"></h3>
+                            <button @click="changeCalMonth(1)" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 text-xs transition">
+                                <i class="fa-solid fa-chevron-right"></i>
+                            </button>
+                        </div>
+
+                        <button @click="applyWeeklySchedulesToCalendarMonth()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200">
+                            <i class="fa-solid fa-wand-magic-sparkles text-blue-600"></i>
+                            <span>Rellenar mes con mis turnos semanales</span>
+                        </button>
+
+                        <div class="grid grid-cols-7 gap-1 text-center font-bold text-[10px] text-slate-400 py-1 border-b border-slate-100">
+                            <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+                        </div>
+
+                        <div class="grid grid-cols-7 gap-1">
+                            <template x-for="day in getCalendarGridDays()" :key="day.dateStr">
+                                <button type="button" 
+                                        @click="openCalDayModal(day)"
+                                        :disabled="!day.isCurrentMonth"
+                                        :class="[
+                                            !day.isCurrentMonth ? 'opacity-20 bg-slate-50 border-transparent cursor-default' : 'bg-slate-50/80 hover:bg-blue-50 border-slate-200/70',
+                                            day.isToday ? 'ring-2 ring-blue-600 font-bold bg-blue-50/50' : '',
+                                            day.entry && day.entry.isWorkDay ? 'border-blue-400 bg-gradient-to-b from-blue-50/80 to-indigo-50/50' : ''
+                                        ]"
+                                        class="h-13 min-h-[52px] rounded-xl border p-1 flex flex-col justify-between items-stretch transition text-left relative overflow-hidden">
+                                    
+                                    <div class="flex justify-between items-center w-full">
+                                        <span class="text-[11px] font-bold" :class="day.isToday ? 'text-blue-600' : 'text-slate-700'" x-text="day.dayNum"></span>
+                                        <span x-show="day.entry && day.entry.isWorkDay" class="w-2 h-2 rounded-full bg-blue-500"></span>
+                                    </div>
+
+                                    <template x-if="day.entry && day.entry.isWorkDay">
+                                        <div class="text-[9px] leading-tight font-semibold text-blue-800 bg-white/90 px-1 py-0.5 rounded-md border border-blue-100 truncate mt-0.5">
+                                            <span x-text="day.entry.startTime"></span>
+                                        </div>
+                                    </template>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recordatorios Automáticos -->
+                <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Recordatorios Automáticos</h3>
+                    
+                    <div class="space-y-2 pb-3 border-b border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-2xl grad-lavender flex items-center justify-center text-sm">
+                                    <i class="fa-solid fa-moon"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-bold text-slate-800">Aviso 1 día antes</h4>
+                                    <p class="text-[11px] text-slate-400">Por la noche previa al trabajo</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" x-model="schedule.notifyDayBefore" @change="saveAll()" class="w-5 h-5 text-blue-600 rounded-lg accent-blue-600">
+                        </div>
+
+                        <div x-show="schedule.notifyDayBefore" class="pl-12 space-y-2 pt-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[11px] text-slate-500 font-medium">Horarios de recordatorio:</label>
+                                <button type="button" @click="addNightTime()" class="text-blue-600 hover:text-blue-700 text-xs font-semibold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100 transition">
+                                    <i class="fa-solid fa-plus text-[10px]"></i>
+                                    <span>Agregar hora</span>
+                                </button>
+                            </div>
+                            
+                            <div class="space-y-1.5">
+                                <template x-for="(time, index) in schedule.nightNotifyTimes" :key="index">
+                                    <div class="flex items-center gap-2">
+                                        <input type="time" x-model="schedule.nightNotifyTimes[index]" @change="saveAll()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500">
+                                        <button type="button" 
+                                                x-show="schedule.nightNotifyTimes.length > 1" 
+                                                @click="removeNightTime(index)" 
+                                                class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition">
+                                            <i class="fa-solid fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-1">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-2xl grad-amber flex items-center justify-center text-sm">
+                                    <i class="fa-solid fa-sun"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-bold text-slate-800">Aviso el mismo día</h4>
+                                    <p class="text-[11px] text-slate-400">Por la mañana antes de salir</p>
+                                </div>
+                            </div>
+                            <input type="checkbox" x-model="schedule.notifySameDay" @change="saveAll()" class="w-5 h-5 text-blue-600 rounded-lg accent-blue-600">
+                        </div>
+
+                        <div x-show="schedule.notifySameDay" class="pl-12 space-y-2 pt-1">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[11px] text-slate-500 font-medium">Horarios de recordatorio:</label>
+                                <button type="button" @click="addMorningTime()" class="text-blue-600 hover:text-blue-700 text-xs font-semibold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100 transition">
+                                    <i class="fa-solid fa-plus text-[10px]"></i>
+                                    <span>Agregar hora</span>
+                                </button>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <template x-for="(time, index) in schedule.morningNotifyTimes" :key="index">
+                                    <div class="flex items-center gap-2">
+                                        <input type="time" x-model="schedule.morningNotifyTimes[index]" @change="saveAll()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500">
+                                        <button type="button" 
+                                                x-show="schedule.morningNotifyTimes.length > 1" 
+                                                @click="removeMorningTime(index)" 
+                                                class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition">
+                                            <i class="fa-solid fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuración de Alarma / Sonido -->
+                <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Configuración de Alarma</h3>
+
+                    <!-- Estado de Permisos de Notificación -->
+                    <div class="p-3 rounded-2xl border flex items-center justify-between"
+                         :class="notificationPermission === 'granted' ? 'bg-emerald-50 border-emerald-200' : (notificationPermission === 'denied' ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200')">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-2xl flex items-center justify-center text-sm"
+                                 :class="notificationPermission === 'granted' ? 'bg-emerald-100 text-emerald-700' : (notificationPermission === 'denied' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700')">
+                                <i :class="notificationPermission === 'granted' ? 'fa-solid fa-bell' : (notificationPermission === 'denied' ? 'fa-solid fa-bell-slash' : 'fa-solid fa-bell-concierge')"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold" 
+                                    :class="notificationPermission === 'granted' ? 'text-emerald-800' : (notificationPermission === 'denied' ? 'text-rose-800' : 'text-amber-800')"
+                                    x-text="notificationPermission === 'granted' ? 'Notificaciones Activas' : (notificationPermission === 'denied' ? 'Notificaciones Bloqueadas' : 'Permiso Pendiente')"></h4>
+                                <p class="text-[11px]" 
+                                   :class="notificationPermission === 'granted' ? 'text-emerald-600' : (notificationPermission === 'denied' ? 'text-rose-600' : 'text-amber-600')"
+                                   x-text="notificationPermission === 'granted' ? 'Recibirás alarmas incluso con la app minimizada' : (notificationPermission === 'denied' ? 'Debes habilitarlas desde los ajustes del navegador' : 'Toca para habilitar las notificaciones')"></p>
+                            </div>
+                        </div>
+                        <button x-show="notificationPermission !== 'granted'" 
+                                @click="requestNotificationPermission()" 
+                                class="px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0"
+                                :class="notificationPermission === 'denied' ? 'bg-rose-200 hover:bg-rose-300 text-rose-800' : 'bg-amber-200 hover:bg-amber-300 text-amber-800'">
+                            <i class="fa-solid fa-unlock mr-1"></i>
+                            <span x-text="notificationPermission === 'denied' ? 'Revisar' : 'Habilitar'"></span>
+                        </button>
+                        <div x-show="notificationPermission === 'granted'" class="w-8 h-8 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-check text-sm"></i>
+                        </div>
+                    </div>
+
+                    <!-- Selector de Sonido de Alarma -->
+                    <div class="space-y-2">
+                        <label class="text-[11px] text-slate-500 font-medium block">Tono de Alarma:</label>
+                        <div class="space-y-1.5">
+                            <template x-for="snd in alarmSoundOptions" :key="snd.id">
+                                <div class="flex items-center gap-2 p-2 rounded-xl border transition cursor-pointer"
+                                     :class="schedule.alarmSound === snd.id ? 'border-blue-400 bg-blue-50/80 shadow-sm' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'"
+                                     @click="schedule.alarmSound = snd.id; saveAll()">
+                                    <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0"
+                                         :class="schedule.alarmSound === snd.id ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200'">
+                                        <i :class="snd.icon"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <h4 class="text-xs font-bold" :class="schedule.alarmSound === snd.id ? 'text-blue-800' : 'text-slate-700'" x-text="snd.name"></h4>
+                                        <p class="text-[10px]" :class="schedule.alarmSound === snd.id ? 'text-blue-500' : 'text-slate-400'" x-text="snd.desc"></p>
+                                    </div>
+                                    <button type="button" @click.stop="previewAlarmSound(snd.id)" 
+                                            class="w-8 h-8 rounded-lg flex items-center justify-center text-xs transition shrink-0"
+                                            :class="schedule.alarmSound === snd.id ? 'bg-blue-200 hover:bg-blue-300 text-blue-700' : 'bg-slate-200 hover:bg-slate-300 text-slate-600'"
+                                            title="Probar sonido">
+                                        <i class="fa-solid fa-play"></i>
+                                    </button>
+                                    <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0"
+                                         :class="schedule.alarmSound === snd.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 text-transparent'">
+                                        <i class="fa-solid fa-check text-[9px]"></i>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Stop sound button -->
+                        <button x-show="isAlarmPlaying" @click="stopAlarmSound()" 
+                                class="w-full bg-rose-100 hover:bg-rose-200 text-rose-700 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition border border-rose-200 animate-pulse">
+                            <i class="fa-solid fa-stop"></i>
+                            <span>Detener Sonido</span>
+                        </button>
+                    </div>
+
+                    <!-- Volume Slider -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[11px] text-slate-500 font-medium">Volumen de alarma:</label>
+                            <span class="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg" x-text="schedule.alarmVolume + '%'"></span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-volume-low text-slate-400 text-xs"></i>
+                            <input type="range" min="10" max="100" step="5" x-model.number="schedule.alarmVolume" @change="saveAll()"
+                                   class="flex-1 h-2 bg-slate-200 rounded-full appearance-none cursor-pointer accent-blue-600"
+                                   style="accent-color: #2563eb;">
+                            <i class="fa-solid fa-volume-high text-slate-600 text-xs"></i>
+                        </div>
+                    </div>
+
+                    <!-- Vibration Toggle -->
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-2xl grad-rose flex items-center justify-center text-sm">
+                                <i class="fa-solid fa-mobile-screen-button"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-800">Vibración</h4>
+                                <p class="text-[11px] text-slate-400">Vibrar el dispositivo con la alarma</p>
+                            </div>
+                        </div>
+                        <button @click="schedule.alarmVibrate = !schedule.alarmVibrate; saveAll()" 
+                                :class="schedule.alarmVibrate ? 'bg-emerald-500' : 'bg-slate-300'"
+                                class="w-10 h-6 rounded-full p-0.5 transition duration-200 flex items-center shrink-0">
+                            <div :class="schedule.alarmVibrate ? 'translate-x-4' : 'translate-x-0'" class="w-5 h-5 bg-white rounded-full shadow-md transition duration-200"></div>
+                        </button>
+                    </div>
+                </div>
+
+                <button @click="saveScheduleSettings(); syncAlarmsToServiceWorker();" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-3 rounded-2xl text-xs shadow-md transition">
+                    Guardar Ajustes
+                </button>
+            </div>
+
+            <!-- TAB 4: AJUSTES DE SECCIONES -->
+            <div x-show="activeTab === 'settings'" class="space-y-5">
+                <div>
+                    <h2 class="text-base font-bold text-slate-800">Ajustes</h2>
+                    <p class="text-xs text-slate-500">Administra el modo vacaciones, respaldos y módulos principales</p>
+                </div>
+
+                <!-- MODO VACACIONES / VIAJE -->
+                <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-2xl grad-amber flex items-center justify-center text-sm">
+                            <i class="fa-solid fa-plane"></i>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-800">Modo Viaje / Vacaciones</h4>
+                            <p class="text-[11px] text-slate-400" x-text="vacationMode ? 'Activo: Recordatorios pausados' : 'Desactivado: Días de trabajo normal'"></p>
+                        </div>
+                    </div>
+                    <button @click="toggleVacationMode()" 
+                            :class="vacationMode ? 'bg-amber-500' : 'bg-slate-300'"
+                            class="w-10 h-6 rounded-full p-0.5 transition duration-200 flex items-center shrink-0">
+                        <div :class="vacationMode ? 'translate-x-4' : 'translate-x-0'" class="w-5 h-5 bg-white rounded-full shadow-md transition duration-200"></div>
+                    </button>
+                </div>
+
+                <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Módulos Visibles</h3>
+                        <button @click="openCustomModuleModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm shadow-blue-500/20 transition">
+                            <i class="fa-solid fa-plus text-xs"></i>
+                            <span>Agregar Módulo</span>
+                        </button>
+                    </div>
+
+                    <template x-for="(mod, index) in customModules" :key="mod.id">
+                        <div class="flex items-center justify-between pt-3" :class="index !== 0 ? 'border-t border-slate-100' : ''">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-2xl flex items-center justify-center text-sm" :class="mod.colorClass || 'grad-sky'">
+                                    <i :class="mod.icon || 'fa-solid fa-cube'"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-bold text-slate-800" x-text="mod.title"></h4>
+                                    <p class="text-[11px] text-slate-400" x-text="mod.subtitle || 'Módulo de lista'"></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button @click="openEditCustomModule(mod)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center text-xs transition" title="Editar">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button @click="deleteCustomModule(mod.id)" class="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition" title="Eliminar">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                <button @click="mod.enabled = !mod.enabled; saveAll()" 
+                                        :class="mod.enabled ? 'bg-emerald-500' : 'bg-slate-300'"
+                                        class="w-10 h-6 rounded-full p-0.5 transition duration-200 flex items-center shrink-0">
+                                    <div :class="mod.enabled ? 'translate-x-4' : 'translate-x-0'" class="w-5 h-5 bg-white rounded-full shadow-md transition duration-200"></div>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- COPIA DE SEGURIDAD -->
+                <div class="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Copia de Seguridad</h3>
+                    <p class="text-[11px] text-slate-400">Exporta o importa tus listas, horarios y preferencias en un archivo.</p>
+                    <div class="flex gap-2 pt-1">
+                        <button @click="exportData()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200">
+                            <i class="fa-solid fa-download text-blue-600"></i>
+                            <span>Exportar Copia</span>
+                        </button>
+                        <button @click="$refs.importFileInput.click()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 transition border border-slate-200">
+                            <i class="fa-solid fa-upload text-blue-600"></i>
+                            <span>Importar Copia</span>
+                        </button>
+                        <input type="file" x-ref="importFileInput" @change="importData($event)" class="hidden" accept=".json">
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- MODAL PARA MÓDULO PERSONALIZADO -->
+        <div x-show="showCustomModuleModal" 
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+             style="display: none;">
+            
+            <div class="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 border border-slate-100 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-slate-800" x-text="isEditingCustomModule ? 'Editar Módulo' : 'Nuevo Módulo Personalizado'"></h3>
+                    <button @click="showCustomModuleModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Título del Módulo</label>
+                        <input type="text" x-model="formCustomModule.title" placeholder="Ej: Gimnasio y Deporte" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800 focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Subtítulo / Pregunta</label>
+                        <input type="text" x-model="formCustomModule.subtitle" placeholder="Ej: ¿Vas al gym saliendo del trabajo?" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800 focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Icono</label>
+                        <div class="grid grid-cols-6 gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200 max-h-28 overflow-y-auto">
+                            <template x-for="iconOption in customModuleIcons" :key="iconOption">
+                                <button type="button" 
+                                        @click="formCustomModule.icon = iconOption" 
+                                        :class="formCustomModule.icon === iconOption ? 'bg-blue-600 text-white shadow' : 'bg-white text-slate-600 hover:bg-slate-200'"
+                                        class="w-8 h-8 rounded-xl flex items-center justify-center text-sm transition">
+                                    <i :class="iconOption"></i>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Color de Fondo</label>
+                        <div class="grid grid-cols-4 gap-2">
+                            <template x-for="grad in gradientPresets" :key="grad.class">
+                                <button type="button" 
+                                        @click="formCustomModule.colorClass = grad.class"
+                                        :class="[grad.class, formCustomModule.colorClass === grad.class ? 'ring-2 ring-blue-600 ring-offset-2' : '']"
+                                        class="p-2 rounded-xl text-center text-[10px] font-bold shadow-sm transition">
+                                    <span x-text="grad.name"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-1">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <label class="block text-slate-600 font-medium">Opciones y Categorías</label>
+                                <p class="text-[10px] text-slate-400">Usa la palomita (✓) para habilitar o deshabilitar la vista de cada opción</p>
+                            </div>
+                            <button type="button" @click="addOptionToCustomModule()" class="text-blue-600 hover:underline font-bold text-[11px] flex items-center gap-1 shrink-0">
+                                <i class="fa-solid fa-plus text-[10px]"></i> Opción
+                            </button>
+                        </div>
+
+                        <div class="space-y-2">
+                            <template x-for="(opt, idx) in formCustomModule.options" :key="idx">
+                                <div class="flex items-center gap-2">
+                                    <button type="button" 
+                                            @click="opt.enabled = (opt.enabled === false ? true : false)" 
+                                            :class="opt.enabled !== false ? 'bg-emerald-500 text-white shadow-xs' : 'bg-slate-200 text-slate-400'"
+                                            class="w-8 h-8 rounded-xl flex items-center justify-center text-xs shrink-0 transition">
+                                        <i class="fa-solid fa-check"></i>
+                                    </button>
+                                    <input type="text" x-model="opt.name" placeholder="Nombre opción" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-medium text-slate-800 text-xs focus:outline-none focus:border-blue-500">
+                                    <button type="button" @click="removeOptionFromCustomModule(idx)" x-show="formCustomModule.options.length > 1" class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center text-xs">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button @click="showCustomModuleModal = false" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-2xl text-xs transition">
+                        Cancelar
+                    </button>
+                    <button @click="saveCustomModule()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-2xl text-xs shadow-md shadow-blue-500/20 transition">
+                        Guardar Módulo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL DETALLE DE DÍA EN CALENDARIO -->
+        <div x-show="showCalModal" 
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+             style="display: none;">
+            
+            <div class="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 border border-slate-100">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-sm font-bold text-slate-800" x-text="calModalTitle"></h3>
+                    <button @click="showCalModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                        <span class="font-bold text-slate-700">¿Se trabaja este día?</span>
+                        <input type="checkbox" x-model="calDayForm.isWorkDay" class="w-5 h-5 text-blue-600 rounded-lg accent-blue-600">
+                    </div>
+
+                    <div x-show="calDayForm.isWorkDay" class="space-y-3 pt-1">
+                        <div>
+                            <label class="block text-slate-600 font-medium mb-1">Nombre / Tipo de Turno</label>
+                            <input type="text" x-model="calDayForm.shiftName" placeholder="Ej: Turno Especial, Guardia..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-slate-600 font-medium mb-1">Hora Entrada</label>
+                                <input type="time" x-model="calDayForm.startTime" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-semibold text-slate-800">
+                            </div>
+                            <div>
+                                <label class="block text-slate-600 font-medium mb-1">Hora Salida</label>
+                                <input type="time" x-model="calDayForm.endTime" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-semibold text-slate-800">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button @click="showCalModal = false" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-2xl text-xs transition">
+                        Cancelar
+                    </button>
+                    <button @click="saveCalDayEntry()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-2xl text-xs shadow-md shadow-blue-500/20 transition">
+                        Aplicar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL AGREGAR / EDITAR OBJETO -->
+        <div x-show="showModal" 
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+             style="display: none;">
+            
+            <div class="bg-white rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 border border-slate-100 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-slate-800" x-text="isEditing ? 'Editar Objeto' : 'Nuevo Objeto'"></h3>
+                    <button @click="showModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Nombre del Objeto</label>
+                        <input type="text" x-model="formItem.name" placeholder="Ej: Sartén antiadherente, Salero..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800 focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Categoría</label>
+                        <select x-model="formItem.category" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-medium text-slate-800 focus:outline-none focus:border-blue-500">
+                            <template x-for="cat in getAllCategories()" :key="cat.id">
+                                <option :value="cat.id" x-text="cat.name"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Icono</label>
+                        <div class="grid grid-cols-6 gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200 max-h-32 overflow-y-auto">
+                            <template x-for="iconOption in iconList" :key="iconOption">
+                                <button type="button" 
+                                        @click="formItem.icon = iconOption" 
+                                        :class="formItem.icon === iconOption ? 'bg-blue-600 text-white shadow' : 'bg-white text-slate-600 hover:bg-slate-200'"
+                                        class="w-8 h-8 rounded-xl flex items-center justify-center text-sm transition">
+                                    <i :class="iconOption"></i>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-600 font-medium mb-1">Color / Identidad de Degradado</label>
+                        <div class="grid grid-cols-4 gap-2">
+                            <template x-for="grad in gradientPresets" :key="grad.class">
+                                <button type="button" 
+                                        @click="formItem.gradientClass = grad.class"
+                                        :class="[grad.class, formItem.gradientClass === grad.class ? 'ring-2 ring-blue-600 ring-offset-2' : '']"
+                                        class="p-2 rounded-xl text-center text-[10px] font-bold shadow-sm transition">
+                                    <span x-text="grad.name"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm" :class="formItem.gradientClass">
+                        <i :class="formItem.icon"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-800" x-text="formItem.name || 'Vista previa'"></p>
+                        <p class="text-[10px] text-slate-400" x-text="getCategoryLabel(formItem.category)"></p>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-2">
+                    <button @click="showModal = false" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-2xl text-xs transition">
+                        Cancelar
+                    </button>
+                    <button @click="saveItem()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-2xl text-xs shadow-md shadow-blue-500/20 transition">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BARRA DE NAVEGACIÓN INFERIOR -->
+        <nav class="glass-header border-t border-slate-200/80 px-6 py-2.5 flex justify-around items-center z-10 shrink-0">
+            <button @click="activeTab = 'home'" :class="activeTab === 'home' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'" class="flex flex-col items-center gap-1 transition">
+                <i class="fa-solid fa-house-circle-check text-lg"></i>
+                <span class="text-[10px] font-semibold">Mi Mochila</span>
+            </button>
+
+            <button @click="activeTab = 'items'" :class="activeTab === 'items' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'" class="flex flex-col items-center gap-1 transition">
+                <i class="fa-solid fa-boxes-packing text-lg"></i>
+                <span class="text-[10px] font-semibold">Mis Cosas</span>
+            </button>
+
+            <button @click="activeTab = 'schedule'" :class="activeTab === 'schedule' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'" class="flex flex-col items-center gap-1 transition">
+                <i class="fa-solid fa-calendar-days text-lg"></i>
+                <span class="text-[10px] font-semibold">Horarios</span>
+            </button>
+        </nav>
+
+    </div>
+
+    <script>
+        function workPackerApp() {
+            return {
+                darkMode: localStorage.getItem('workpacker_darkmode') === 'true',
+                vacationMode: localStorage.getItem('workpacker_vacation_mode') === 'true',
+                activeTab: 'home', 
+                itemFilterCategory: 'all',
+                showModal: false,
+                isEditing: false,
+
+                // Vibración Háptica en móvil
+                triggerHaptic() {
+                    if (navigator && navigator.vibrate) {
+                        try { navigator.vibrate(35); } catch(e){}
+                    }
+                },
+
+                // Inicialización con LocalStorage y guardado profundo
+                init() {
+                    if (localStorage.getItem('workpacker_catalog_items')) {
+                        try { this.catalogItems = JSON.parse(localStorage.getItem('workpacker_catalog_items')); } catch(e){}
+                    }
+                    if (localStorage.getItem('workpacker_custom_modules')) {
+                        try { this.customModules = JSON.parse(localStorage.getItem('workpacker_custom_modules')); } catch(e){}
+                    }
+                    if (localStorage.getItem('workpacker_saved_schedules')) {
+                        try { this.savedSchedules = JSON.parse(localStorage.getItem('workpacker_saved_schedules')); } catch(e){}
+                    }
+                    if (localStorage.getItem('workpacker_calendar_entries')) {
+                        try { this.calendarEntries = JSON.parse(localStorage.getItem('workpacker_calendar_entries')); } catch(e){}
+                    }
+                    if (localStorage.getItem('workpacker_schedule_settings')) {
+                        try { 
+                            const saved = JSON.parse(localStorage.getItem('workpacker_schedule_settings'));
+                            // Merge with defaults so new fields (alarmSound, etc.) exist
+                            this.schedule = { ...this.schedule, ...saved };
+                        } catch(e){}
+                    }
+
+                    // Watchers para guardar ante cualquier modificación de estado
+                    this.$watch('catalogItems', () => this.saveAll());
+                    this.$watch('customModules', () => this.saveAll());
+                    this.$watch('savedSchedules', () => { this.saveAll(); this.syncAlarmsToServiceWorker(); });
+                    this.$watch('calendarEntries', () => { this.saveAll(); this.syncAlarmsToServiceWorker(); });
+                    this.$watch('schedule', () => { this.saveAll(); this.syncAlarmsToServiceWorker(); });
+
+                    // ═══ Start Alarm Engine ═══
+                    this.notificationPermission = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+                    
+                    // Start the alarm checking loop
+                    this.$nextTick(() => {
+                        this.startAlarmEngine();
+                    });
+                },
+
+                // Función central de guardado en LocalStorage
+                saveAll() {
+                    localStorage.setItem('workpacker_catalog_items', JSON.stringify(this.catalogItems));
+                    localStorage.setItem('workpacker_custom_modules', JSON.stringify(this.customModules));
+                    localStorage.setItem('workpacker_saved_schedules', JSON.stringify(this.savedSchedules));
+                    localStorage.setItem('workpacker_calendar_entries', JSON.stringify(this.calendarEntries));
+                    localStorage.setItem('workpacker_schedule_settings', JSON.stringify(this.schedule));
+                    localStorage.setItem('workpacker_vacation_mode', this.vacationMode);
+                },
+
+                toggleDarkMode() {
+                    this.darkMode = !this.darkMode;
+                    localStorage.setItem('workpacker_darkmode', this.darkMode);
+                    this.triggerHaptic();
+                },
+
+                toggleVacationMode() {
+                    this.vacationMode = !this.vacationMode;
+                    this.saveAll();
+                    this.triggerHaptic();
+                    this.showToast(this.vacationMode ? 'Modo Vacaciones Activo 🏖️' : 'Modo Vacaciones Desactivado 💼', this.vacationMode ? 'Se han pausado los avisos de trabajo.' : 'Se han reanudado tus horarios habituales.');
+                },
+
+                exportData() {
+                    this.triggerHaptic();
+                    const backup = {
+                        catalogItems: this.catalogItems,
+                        customModules: this.customModules,
+                        savedSchedules: this.savedSchedules,
+                        calendarEntries: this.calendarEntries,
+                        schedule: this.schedule,
+                        darkMode: this.darkMode,
+                        vacationMode: this.vacationMode
+                    };
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
+                    const downloadAnchor = document.createElement('a');
+                    downloadAnchor.setAttribute("href", dataStr);
+                    downloadAnchor.setAttribute("download", `WorkPacker_Copia_${new Date().toISOString().slice(0,10)}.json`);
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                    this.showToast('Copia Creada 💾', 'Se descargó la copia de seguridad correctamente.');
+                },
+
+                importData(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            if (data.catalogItems) this.catalogItems = data.catalogItems;
+                            if (data.customModules) this.customModules = data.customModules;
+                            if (data.savedSchedules) this.savedSchedules = data.savedSchedules;
+                            if (data.calendarEntries) this.calendarEntries = data.calendarEntries;
+                            if (data.schedule) this.schedule = data.schedule;
+                            if (data.darkMode !== undefined) this.darkMode = data.darkMode;
+                            if (data.vacationMode !== undefined) this.vacationMode = data.vacationMode;
+                            this.saveAll();
+                            this.triggerHaptic();
+                            this.showToast('Restauración Exitosa 🎉', 'Todos tus datos y listas han sido cargados.');
+                        } catch(err) {
+                            this.showToast('Error de Archivo', 'El archivo seleccionado no es válido.');
+                        }
+                    };
+                    reader.readAsText(file);
+                    event.target.value = '';
+                },
+
+                // Seleccionar opción en módulos y persistir
+                selectModuleOption(mod, optId) {
+                    mod.selectedOption = optId;
+                    this.triggerHaptic();
+                    this.saveAll();
+                },
+
+                // Módulos Personalizados y Predefinidos
+                showCustomModuleModal: false,
+                isEditingCustomModule: false,
+                customModules: [
+                    {
+                        id: 'mod_cooking',
+                        title: 'Sección Cocina / Vianda',
+                        subtitle: 'Pregunta si vas a cocinar o llevar comida',
+                        icon: 'fa-solid fa-utensils',
+                        colorClass: 'grad-amber',
+                        enabled: true,
+                        selectedOption: 'cook',
+                        options: [
+                            { id: 'cook', name: 'Sí, cocino', icon: 'fa-solid fa-fire-burner', enabled: true },
+                            { id: 'tupperware', name: 'Llevo vianda', icon: 'fa-solid fa-box-archive', enabled: true },
+                            { id: 'none', name: 'Compro allá', icon: 'fa-solid fa-shop', enabled: true }
+                        ]
+                    },
+                    {
+                        id: 'mod_tools',
+                        title: 'Sección Herramientas',
+                        subtitle: 'Pregunta si llevas cosas para moto o electrónica',
+                        icon: 'fa-solid fa-screwdriver-wrench',
+                        colorClass: 'grad-teal',
+                        enabled: true,
+                        selectedOption: 'none',
+                        options: [
+                            { id: 'none', name: 'Hoy no', icon: 'fa-solid fa-ban', enabled: true },
+                            { id: 'moto', name: 'Para Moto', icon: 'fa-solid fa-motorcycle', enabled: true },
+                            { id: 'electronics', name: 'Electrónica', icon: 'fa-solid fa-microchip', enabled: true }
+                        ]
+                    },
+                    {
+                        id: 101,
+                        title: '¿Vas al Gimnasio hoy?',
+                        subtitle: 'Lleva tu ropa deportiva y accesorios',
+                        icon: 'fa-solid fa-dumbbell',
+                        colorClass: 'grad-rose',
+                        enabled: true,
+                        selectedOption: 'gym_no',
+                        options: [
+                            { id: 'gym_no', name: 'Hoy no', icon: 'fa-solid fa-ban', enabled: true },
+                            { id: 'gym_yes', name: 'Sí, al Gym', icon: 'fa-solid fa-dumbbell', enabled: true }
+                        ]
+                    }
+                ],
+                customModuleIcons: [
+                    'fa-solid fa-dumbbell',
+                    'fa-solid fa-shirt',
+                    'fa-solid fa-laptop',
+                    'fa-solid fa-umbrella',
+                    'fa-solid fa-headphones',
+                    'fa-solid fa-notes-medical',
+                    'fa-solid fa-dog',
+                    'fa-solid fa-bicycle',
+                    'fa-solid fa-glasses',
+                    'fa-solid fa-briefcase',
+                    'fa-solid fa-shield-halved',
+                    'fa-solid fa-book',
+                    'fa-solid fa-utensils',
+                    'fa-solid fa-screwdriver-wrench'
+                ],
+                formCustomModule: {
+                    id: null,
+                    title: '',
+                    subtitle: '',
+                    icon: 'fa-solid fa-dumbbell',
+                    colorClass: 'grad-rose',
+                    enabled: true,
+                    selectedOption: '',
+                    options: [
+                        { id: 'opt_1', name: 'Opción 1', icon: 'fa-solid fa-check', enabled: true },
+                        { id: 'opt_2', name: 'Opción 2', icon: 'fa-solid fa-check', enabled: true }
+                    ]
+                },
+
+                scheduleMode: 'weekly',
+                isEditingSchedule: false,
+                formSchedule: {
+                    id: null,
+                    name: '',
+                    workDays: [1, 2, 3, 4, 5],
+                    startTime: '08:00',
+                    endTime: '17:00',
+                    colorClass: 'grad-sky'
+                },
+
+                savedSchedules: [
+                    { id: 1, name: 'Turno Regular (L-V)', workDays: [1, 2, 3, 4, 5], startTime: '08:00', endTime: '17:00', colorClass: 'grad-sky', active: true }
+                ],
+
+                calCurrentDate: new Date(),
+                calendarEntries: {},
+                showCalModal: false,
+                calModalTitle: '',
+                selectedCalDateStr: '',
+                calDayForm: {
+                    isWorkDay: true,
+                    shiftName: 'Turno Regular',
+                    startTime: '08:00',
+                    endTime: '17:00'
+                },
+
+                toast: {
+                    visible: false,
+                    title: '',
+                    message: ''
+                },
+
+                schedule: {
+                    notifyDayBefore: true,
+                    nightNotifyTimes: ['21:00'],
+                    notifySameDay: true,
+                    morningNotifyTimes: ['07:00'],
+                    startTime: '08:00',
+                    endTime: '17:00',
+                    alarmSound: 'classic',
+                    alarmVolume: 80,
+                    alarmVibrate: true
+                },
+
+                // Alarm engine state
+                notificationPermission: (typeof Notification !== 'undefined') ? Notification.permission : 'default',
+                alarmEngineRunning: false,
+                alarmAudioContext: null,
+                alarmOscillator: null,
+                alarmGainNode: null,
+                isAlarmPlaying: false,
+                firedAlarmKeys: JSON.parse(localStorage.getItem('workpacker_fired_alarms') || '{}'),
+                showAlarmModal: false,
+                activeAlarmData: null,
+
+                alarmSoundOptions: [
+                    { id: 'classic', name: 'Clásica', icon: 'fa-solid fa-bell', desc: 'Tono de alarma tradicional' },
+                    { id: 'gentle', name: 'Suave', icon: 'fa-solid fa-cloud', desc: 'Tono relajado y progresivo' },
+                    { id: 'urgent', name: 'Urgente', icon: 'fa-solid fa-triangle-exclamation', desc: 'Tono fuerte y repetitivo' },
+                    { id: 'bell', name: 'Campana', icon: 'fa-solid fa-bell-concierge', desc: 'Campana metálica' },
+                    { id: 'digital', name: 'Digital', icon: 'fa-solid fa-robot', desc: 'Tono electrónico moderno' }
+                ],
+
+                addNightTime() {
+                    this.schedule.nightNotifyTimes.push('20:00');
+                    this.saveAll();
+                },
+                removeNightTime(index) {
+                    if (this.schedule.nightNotifyTimes.length > 1) {
+                        this.schedule.nightNotifyTimes.splice(index, 1);
+                        this.saveAll();
+                    }
+                },
+                addMorningTime() {
+                    this.schedule.morningNotifyTimes.push('06:30');
+                    this.saveAll();
+                },
+                removeMorningTime(index) {
+                    if (this.schedule.morningNotifyTimes.length > 1) {
+                        this.schedule.morningNotifyTimes.splice(index, 1);
+                        this.saveAll();
+                    }
+                },
+
+                weekDays: [
+                    { short: 'D', name: 'Domingo' },
+                    { short: 'L', name: 'Lunes' },
+                    { short: 'M', name: 'Martes' },
+                    { short: 'X', name: 'Miércoles' },
+                    { short: 'J', name: 'Jueves' },
+                    { short: 'V', name: 'Viernes' },
+                    { short: 'S', name: 'Sábado' }
+                ],
+
+                iconList: [
+                    'fa-solid fa-kitchen-set',
+                    'fa-solid fa-bottle-droplet',
+                    'fa-solid fa-fire-burner',
+                    'fa-solid fa-box-archive',
+                    'fa-solid fa-spoon',
+                    'fa-solid fa-screwdriver-wrench',
+                    'fa-solid fa-wrench',
+                    'fa-solid fa-microchip',
+                    'fa-solid fa-oil-can',
+                    'fa-solid fa-plug',
+                    'fa-solid fa-key',
+                    'fa-solid fa-id-card',
+                    'fa-solid fa-laptop',
+                    'fa-solid fa-charging-station',
+                    'fa-solid fa-bottle-water',
+                    'fa-solid fa-mug-hot',
+                    'fa-solid fa-headphones',
+                    'fa-solid fa-umbrella',
+                    'fa-solid fa-shirt',
+                    'fa-solid fa-glasses',
+                    'fa-solid fa-wallet',
+                    'fa-solid fa-notes-medical',
+                    'fa-solid fa-bag-shopping'
+                ],
+
+                gradientPresets: [
+                    { name: 'Melocotón', class: 'grad-peach' },
+                    { name: 'Menta', class: 'grad-mint' },
+                    { name: 'Cielo', class: 'grad-sky' },
+                    { name: 'Lavanda', class: 'grad-lavender' },
+                    { name: 'Rosa Pastel', class: 'grad-rose' },
+                    { name: 'Ámbar', class: 'grad-amber' },
+                    { name: 'Verde Agua', class: 'grad-teal' }
+                ],
+
+                formItem: {
+                    id: null,
+                    name: '',
+                    category: 'essential',
+                    icon: 'fa-solid fa-key',
+                    gradientClass: 'grad-sky',
+                    packed: false
+                },
+
+                catalogItems: [
+                    { id: 1, name: 'Llaves de la oficina y casa', category: 'essential', icon: 'fa-solid fa-key', gradientClass: 'grad-sky', packed: true },
+                    { id: 2, name: 'Credencial de trabajo', category: 'essential', icon: 'fa-solid fa-id-card', gradientClass: 'grad-lavender', packed: true },
+                    { id: 3, name: 'Cargador de celular y laptop', category: 'essential', icon: 'fa-solid fa-charging-station', gradientClass: 'grad-teal', packed: false },
+                    { id: 4, name: 'Botella con agua helada', category: 'essential', icon: 'fa-solid fa-bottle-water', gradientClass: 'grad-mint', packed: false },
+                    
+                    { id: 5, name: 'Sartén antiadherente pequeña', category: 'cook', icon: 'fa-solid fa-kitchen-set', gradientClass: 'grad-peach', packed: false },
+                    { id: 6, name: 'Salero y especiero', category: 'cook', icon: 'fa-solid fa-bottle-droplet', gradientClass: 'grad-amber', packed: false },
+                    { id: 7, name: 'Espátula y aceite de cocina', category: 'cook', icon: 'fa-solid fa-fire-burner', gradientClass: 'grad-rose', packed: false },
+                    { id: 8, name: 'Ingredientes frescos (Comida cruda)', category: 'cook', icon: 'fa-solid fa-apple-whole', gradientClass: 'grad-mint', packed: false },
+
+                    { id: 9, name: 'Tupperware con la comida lista', category: 'tupperware', icon: 'fa-solid fa-box-archive', gradientClass: 'grad-sky', packed: false },
+                    { id: 10, name: 'Juego de cubiertos y servilleta', category: 'tupperware', icon: 'fa-solid fa-spoon', gradientClass: 'grad-lavender', packed: false },
+
+                    { id: 11, name: 'Juego de llaves y desarmadores (Moto)', category: 'tools_moto', icon: 'fa-solid fa-screwdriver-wrench', gradientClass: 'grad-teal', packed: false },
+                    { id: 12, name: 'Lubricante de cadena / Manómetro', category: 'tools_moto', icon: 'fa-solid fa-oil-can', gradientClass: 'grad-amber', packed: false },
+                    { id: 13, name: 'Multímetro, cautín y estaño (Electrónica)', category: 'tools_elec', icon: 'fa-solid fa-microchip', gradientClass: 'grad-lavender', packed: false },
+                    { id: 14, name: 'Cinta aislante y conectores', category: 'tools_elec', icon: 'fa-solid fa-plug', gradientClass: 'grad-sky', packed: false },
+                    { id: 15, name: 'Mochila del Gym y Toalla', category: 'gym_yes', icon: 'fa-solid fa-dumbbell', gradientClass: 'grad-rose', packed: false }
+                ],
+
+                getAllCategories() {
+                    const categories = [
+                        { id: 'essential', name: 'Esencial (Siempre llevar)' },
+                        { id: 'cook', name: 'Solo si voy a COCINAR allá' },
+                        { id: 'tupperware', name: 'Solo si llevo VIANDA/COMIDA' },
+                        { id: 'tools_moto', name: 'Herramienta para MOTO' },
+                        { id: 'tools_elec', name: 'Herramienta para ELECTRÓNICA' },
+                        { id: 'tools', name: 'Herramienta GENERAL' }
+                    ];
+
+                    this.customModules.forEach(mod => {
+                        if (mod.enabled && mod.options) {
+                            mod.options.forEach(opt => {
+                                if (opt.enabled !== false) {
+                                    categories.push({
+                                        id: opt.id,
+                                        name: `${mod.title}: ${opt.name}`
+                                    });
+                                }
+                            });
+                        }
+                    });
+
+                    return categories;
+                },
+
+                getTodayFormatted() {
+                    const options = { weekday: 'long', day: 'numeric', month: 'short' };
+                    const today = new Date().toLocaleDateString('es-ES', options);
+                    return today.charAt(0).toUpperCase() + today.slice(1);
+                },
+
+                isWorkDayToday() {
+                    const today = new Date();
+                    const year = today.getFullYear();
+                    const month = String(today.getMonth() + 1).padStart(2, '0');
+                    const day = String(today.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+                    const dayOfWeek = today.getDay();
+
+                    if (this.calendarEntries && this.calendarEntries[dateStr] !== undefined) {
+                        return !!this.calendarEntries[dateStr].isWorkDay;
+                    }
+
+                    const activeSchedules = this.savedSchedules.filter(s => s.active);
+                    return activeSchedules.some(s => s.workDays.includes(dayOfWeek));
+                },
+
+                getCalMonthYearLabel() {
+                    const options = { month: 'long', year: 'numeric' };
+                    return this.calCurrentDate.toLocaleDateString('es-ES', options);
+                },
+
+                getCalendarGridDays() {
+                    const year = this.calCurrentDate.getFullYear();
+                    const month = this.calCurrentDate.getMonth();
+                    
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+                    
+                    const startDayOfWeek = firstDay.getDay();
+                    const totalDays = lastDay.getDate();
+                    
+                    const grid = [];
+                    const today = new Date();
+                    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                    
+                    const prevMonthLastDay = new Date(year, month, 0).getDate();
+                    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+                        const d = prevMonthLastDay - i;
+                        const pMonth = month === 0 ? 12 : month;
+                        const pYear = month === 0 ? year - 1 : year;
+                        const dateStr = `${pYear}-${String(pMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        grid.push({
+                            dayNum: d,
+                            dateStr: dateStr,
+                            isCurrentMonth: false,
+                            isToday: dateStr === todayStr,
+                            entry: this.calendarEntries[dateStr] || null
+                        });
+                    }
+                    
+                    for (let d = 1; d <= totalDays; d++) {
+                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        grid.push({
+                            dayNum: d,
+                            dateStr: dateStr,
+                            isCurrentMonth: true,
+                            isToday: dateStr === todayStr,
+                            entry: this.calendarEntries[dateStr] || null
+                        });
+                    }
+                    
+                    const remaining = (7 - (grid.length % 7)) % 7;
+                    for (let d = 1; d <= remaining; d++) {
+                        const nMonth = month === 11 ? 1 : month + 2;
+                        const nYear = month === 11 ? year + 1 : year;
+                        const dateStr = `${nYear}-${String(nMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        grid.push({
+                            dayNum: d,
+                            dateStr: dateStr,
+                            isCurrentMonth: false,
+                            isToday: dateStr === todayStr,
+                            entry: this.calendarEntries[dateStr] || null
+                        });
+                    }
+                    
+                    return grid;
+                },
+
+                changeCalMonth(delta) {
+                    this.calCurrentDate = new Date(this.calCurrentDate.getFullYear(), this.calCurrentDate.getMonth() + delta, 1);
+                },
+
+                applyWeeklySchedulesToCalendarMonth() {
+                    const year = this.calCurrentDate.getFullYear();
+                    const month = this.calCurrentDate.getMonth();
+                    const totalDays = new Date(year, month + 1, 0).getDate();
+                    const activeSchedules = this.savedSchedules.filter(s => s.active);
+
+                    for (let d = 1; d <= totalDays; d++) {
+                        const dateObj = new Date(year, month, d);
+                        const dayOfWeek = dateObj.getDay();
+                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        
+                        const matchedSchedule = activeSchedules.find(s => s.workDays.includes(dayOfWeek));
+                        if (matchedSchedule) {
+                            this.calendarEntries[dateStr] = {
+                                isWorkDay: true,
+                                shiftName: matchedSchedule.name,
+                                startTime: matchedSchedule.startTime,
+                                endTime: matchedSchedule.endTime
+                            };
+                        } else {
+                            this.calendarEntries[dateStr] = {
+                                isWorkDay: false,
+                                shiftName: '',
+                                startTime: '',
+                                endTime: ''
+                            };
+                        }
+                    }
+                    this.saveAll();
+                    this.showToast('Calendario Actualizado', 'Se aplicaron los turnos semanales a todo el mes.');
+                },
+
+                openCalDayModal(day) {
+                    if (!day.isCurrentMonth) return;
+                    this.selectedCalDateStr = day.dateStr;
+                    const existing = this.calendarEntries[day.dateStr];
+                    this.calDayForm = existing ? { ...existing } : {
+                        isWorkDay: true,
+                        shiftName: 'Turno Regular',
+                        startTime: '08:00',
+                        endTime: '17:00'
+                    };
+                    this.calModalTitle = `Ajustar Día (${day.dayNum})`;
+                    this.showCalModal = true;
+                },
+
+                saveCalDayEntry() {
+                    if (this.selectedCalDateStr) {
+                        this.calendarEntries[this.selectedCalDateStr] = { ...this.calDayForm };
+                        this.saveAll();
+                        this.showToast('Día Configurado', 'Se guardaron los cambios para este día.');
+                    }
+                    this.showCalModal = false;
+                },
+
+                toggleFormWorkDay(index) {
+                    const pos = this.formSchedule.workDays.indexOf(index);
+                    if (pos > -1) {
+                        this.formSchedule.workDays.splice(pos, 1);
+                    } else {
+                        this.formSchedule.workDays.push(index);
+                    }
+                },
+
+                saveSchedule() {
+                    if (!this.formSchedule.name.trim()) {
+                        this.showToast('Campo Requerido', 'Por favor ingresa un nombre para el turno.');
+                        return;
+                    }
+                    if (this.isEditingSchedule) {
+                        const idx = this.savedSchedules.findIndex(s => s.id === this.formSchedule.id);
+                        if (idx !== -1) {
+                            this.savedSchedules[idx] = JSON.parse(JSON.stringify(this.formSchedule));
+                        }
+                        this.showToast('Turno Actualizado', 'El turno ha sido modificado.');
+                    } else {
+                        const newSch = { ...this.formSchedule, id: Date.now(), active: true };
+                        this.savedSchedules.push(newSch);
+                        this.showToast('Turno Creado', 'Se agregó el nuevo turno a tu lista.');
+                    }
+                    this.saveAll();
+                    this.resetScheduleForm();
+                },
+
+                resetScheduleForm() {
+                    this.isEditingSchedule = false;
+                    this.formSchedule = {
+                        id: null,
+                        name: '',
+                        workDays: [1, 2, 3, 4, 5],
+                        startTime: '08:00',
+                        endTime: '17:00',
+                        colorClass: 'grad-sky'
+                    };
+                },
+
+                toggleScheduleActive(id) {
+                    const sch = this.savedSchedules.find(s => s.id === id);
+                    if (sch) {
+                        sch.active = !sch.active;
+                        if (sch.active) {
+                            this.schedule.startTime = sch.startTime;
+                            this.schedule.endTime = sch.endTime;
+                        }
+                        this.saveAll();
+                    }
+                },
+
+                editSchedule(sch) {
+                    this.isEditingSchedule = true;
+                    this.formSchedule = JSON.parse(JSON.stringify(sch));
+                },
+
+                deleteSchedule(id) {
+                    this.savedSchedules = this.savedSchedules.filter(s => s.id !== id);
+                    this.saveAll();
+                    this.showToast('Turno Eliminado', 'Se ha borrado el turno.');
+                },
+
+                getCategoryLabel(category) {
+                    switch(category) {
+                        case 'essential': return 'Esencial (Siempre)';
+                        case 'cook': return 'Si voy a Cocinar';
+                        case 'tupperware': return 'Si llevo Vianda';
+                        case 'tools_moto': return 'Herramienta Moto';
+                        case 'tools_elec': return 'Herramienta Electrónica';
+                        case 'tools': return 'Herramientas Generales';
+                        default: {
+                            for (const mod of this.customModules) {
+                                const opt = (mod.options || []).find(o => o.id === category);
+                                if (opt) return `${mod.title}: ${opt.name}`;
+                            }
+                            return 'General';
+                        }
+                    }
+                },
+
+                getFilteredItems() {
+                    return this.catalogItems.filter(item => {
+                        if (item.category === 'essential') return true;
+
+                        let matches = false;
+                        this.customModules.forEach(mod => {
+                            if (mod.enabled && mod.selectedOption) {
+                                const sel = mod.selectedOption;
+                                if (sel === item.category) matches = true;
+                                if (sel === 'moto' && (item.category === 'tools_moto' || item.category === 'tools')) matches = true;
+                                if (sel === 'electronics' && (item.category === 'tools_elec' || item.category === 'tools')) matches = true;
+                                if (sel === 'cook' && item.category === 'cook') matches = true;
+                                if (sel === 'tupperware' && item.category === 'tupperware') matches = true;
+                            }
+                        });
+
+                        return matches;
+                    });
+                },
+
+                getPackedCount() {
+                    return this.getFilteredItems().filter(i => i.packed).length;
+                },
+
+                getPackedPercentage() {
+                    const total = this.getFilteredItems().length;
+                    if (total === 0) return 0;
+                    return Math.round((this.getPackedCount() / total) * 100);
+                },
+
+                toggleItemPacked(id) {
+                    const item = this.catalogItems.find(i => i.id === id);
+                    if (item) {
+                        item.packed = !item.packed;
+                        this.triggerHaptic();
+                        this.saveAll();
+                    }
+                },
+
+                resetChecklist() {
+                    this.catalogItems.forEach(i => i.packed = false);
+                    this.triggerHaptic();
+                    this.saveAll();
+                    this.showToast('Lista Reiniciada', 'Se desmarcaron todos los objetos.');
+                },
+
+                openModalToAdd() {
+                    this.isEditing = false;
+                    this.formItem = {
+                        id: Date.now(),
+                        name: '',
+                        category: 'essential',
+                        icon: 'fa-solid fa-key',
+                        gradientClass: 'grad-sky',
+                        packed: false
+                    };
+                    this.showModal = true;
+                },
+
+                openModalToEdit(item) {
+                    this.isEditing = true;
+                    this.formItem = JSON.parse(JSON.stringify(item));
+                    this.showModal = true;
+                },
+
+                saveItem() {
+                    if (!this.formItem.name.trim()) {
+                        this.showToast('Campo Vacío', 'Por favor escribe el nombre del objeto.');
+                        return;
+                    }
+
+                    if (this.isEditing) {
+                        const idx = this.catalogItems.findIndex(i => i.id === this.formItem.id);
+                        if (idx !== -1) {
+                            this.catalogItems[idx] = { ...this.formItem };
+                        }
+                        this.showToast('Guardado', 'El objeto ha sido actualizado.');
+                    } else {
+                        this.catalogItems.push({ ...this.formItem });
+                        this.showToast('Agregado', 'Nuevo objeto añadido a tu lista.');
+                    }
+
+                    this.saveAll();
+                    this.showModal = false;
+                },
+
+                deleteItem(id) {
+                    this.catalogItems = this.catalogItems.filter(i => i.id !== id);
+                    this.saveAll();
+                    this.showToast('Eliminado', 'Se ha eliminado el objeto.');
+                },
+
+                openCustomModuleModal() {
+                    this.isEditingCustomModule = false;
+                    this.formCustomModule = {
+                        id: Date.now(),
+                        title: '',
+                        subtitle: '',
+                        icon: 'fa-solid fa-dumbbell',
+                        colorClass: 'grad-rose',
+                        enabled: true,
+                        selectedOption: '',
+                        options: [
+                            { id: 'opt_' + Date.now() + '_1', name: 'Opción 1', icon: 'fa-solid fa-check', enabled: true },
+                            { id: 'opt_' + Date.now() + '_2', name: 'Opción 2', icon: 'fa-solid fa-check', enabled: true }
+                        ]
+                    };
+                    this.showCustomModuleModal = true;
+                },
+
+                openEditCustomModule(mod) {
+                    this.isEditingCustomModule = true;
+                    this.formCustomModule = JSON.parse(JSON.stringify(mod));
+                    if (this.formCustomModule.options) {
+                        this.formCustomModule.options.forEach(opt => {
+                            if (opt.enabled === undefined) opt.enabled = true;
+                        });
+                    }
+                    this.showCustomModuleModal = true;
+                },
+
+                addOptionToCustomModule() {
+                    const newId = 'opt_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+                    this.formCustomModule.options.push({
+                        id: newId,
+                        name: 'Nueva Opción',
+                        icon: 'fa-solid fa-check',
+                        enabled: true
+                    });
+                },
+
+                removeOptionFromCustomModule(idx) {
+                    if (this.formCustomModule.options.length > 1) {
+                        this.formCustomModule.options.splice(idx, 1);
+                    }
+                },
+
+                saveCustomModule() {
+                    if (!this.formCustomModule.title.trim()) {
+                        this.showToast('Campo requerido', 'Ingresa el título del módulo.');
+                        return;
+                    }
+
+                    if (this.isEditingCustomModule) {
+                        const idx = this.customModules.findIndex(m => m.id === this.formCustomModule.id);
+                        if (idx !== -1) {
+                            this.customModules[idx] = JSON.parse(JSON.stringify(this.formCustomModule));
+                        }
+                        this.showToast('Módulo Actualizado', 'Los cambios y categorías se han actualizado.');
+                    } else {
+                        const newMod = JSON.parse(JSON.stringify(this.formCustomModule));
+                        if (newMod.options.length > 0) {
+                            newMod.selectedOption = newMod.options[0].id;
+                        }
+                        this.customModules.push(newMod);
+                        this.showToast('Módulo Creado', 'Las opciones creadas ya están disponibles como categorías.');
+                    }
+
+                    this.saveAll();
+                    this.showCustomModuleModal = false;
+                },
+
+                deleteCustomModule(id) {
+                    this.customModules = this.customModules.filter(m => m.id !== id);
+                    this.saveAll();
+                    this.showToast('Eliminado', 'Se eliminó el módulo personalizado.');
+                },
+
+                saveScheduleSettings() {
+                    this.saveAll();
+                    this.showToast('Configuración Guardada', 'Tus días y horarios de recordatorio fueron actualizados.');
+                },
+
+                triggerSimulatedNotification() {
+                    // Now triggers a REAL notification + sound
+                    this.requestNotificationPermission().then(() => {
+                        const cookMod = this.customModules.find(m => m.id === 'mod_cooking' || m.title.includes('Cocina'));
+                        const isCooking = cookMod && cookMod.enabled && cookMod.selectedOption === 'cook';
+                        const text = isCooking 
+                            ? 'Recordatorio: Mañana trabajas. No olvides la sartén, el salero e ingredientes.' 
+                            : 'Recordatorio: Mañana trabajas. Prepara tu vianda y elementos esenciales.';
+                        
+                        this.fireAlarm('🔔 WorkPacker - Prueba', text);
+                    });
+                },
+
+                // ═══════════════════════════════════════════════
+                // ███ ALARM ENGINE - Real Notifications & Sound ███
+                // ═══════════════════════════════════════════════
+
+                async requestNotificationPermission() {
+                    if (typeof Notification === 'undefined') {
+                        this.showToast('No Soportado', 'Tu navegador no soporta notificaciones. Usa Chrome o Edge.');
+                        return;
+                    }
+                    
+                    if (Notification.permission === 'granted') {
+                        this.notificationPermission = 'granted';
+                        return;
+                    }
+                    
+                    if (Notification.permission === 'denied') {
+                        this.notificationPermission = 'denied';
+                        this.showToast('Permiso Denegado', 'Las notificaciones están bloqueadas. Habilítalas desde los ajustes de tu navegador.');
+                        return;
+                    }
+
+                    try {
+                        const result = await Notification.requestPermission();
+                        this.notificationPermission = result;
+                        if (result === 'granted') {
+                            this.showToast('Notificaciones Activas ✅', '¡Perfecto! Ahora recibirás las alarmas.');
+                            this.syncAlarmsToServiceWorker();
+                        } else {
+                            this.showToast('Permiso Denegado', 'No podremos enviarte recordatorios sin permiso de notificaciones.');
+                        }
+                    } catch(e) {
+                        console.error('Error requesting notification permission:', e);
+                    }
+                },
+
+                startAlarmEngine() {
+                    if (this.alarmEngineRunning) return;
+                    this.alarmEngineRunning = true;
+
+                    // Check alarms every 30 seconds
+                    setInterval(() => {
+                        this.checkAndFireAlarms();
+                    }, 30000);
+
+                    // Also check immediately on start
+                    this.checkAndFireAlarms();
+
+                    // Sync alarms to service worker
+                    this.syncAlarmsToServiceWorker();
+
+                    // Listen for SW messages
+                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.addEventListener('message', (event) => {
+                            if (event.data && event.data.type === 'ALARM_FIRED') {
+                                this.playAlarmSound(this.schedule.alarmSound);
+                                this.activeAlarmData = event.data.alarm;
+                                this.showAlarmModal = true;
+                            }
+                        });
+                    }
+
+                    // Keep SW alive with periodic keepalive
+                    setInterval(() => {
+                        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                            navigator.serviceWorker.controller.postMessage({ type: 'KEEPALIVE' });
+                        }
+                    }, 120000); // every 2 minutes
+
+                    // Register periodic sync if available
+                    this.registerPeriodicSync();
+
+                    // Clean old fired alarms (older than 48h)
+                    this.cleanOldFiredAlarms();
+                },
+
+                cleanOldFiredAlarms() {
+                    const now = Date.now();
+                    const cutoff = 48 * 60 * 60 * 1000; // 48 hours
+                    const keys = Object.keys(this.firedAlarmKeys);
+                    let changed = false;
+                    keys.forEach(key => {
+                        if (now - this.firedAlarmKeys[key] > cutoff) {
+                            delete this.firedAlarmKeys[key];
+                            changed = true;
+                        }
+                    });
+                    if (changed) {
+                        localStorage.setItem('workpacker_fired_alarms', JSON.stringify(this.firedAlarmKeys));
+                    }
+                },
+
+                async registerPeriodicSync() {
+                    if ('serviceWorker' in navigator && 'periodicSync' in (await navigator.serviceWorker.ready)) {
+                        try {
+                            const registration = await navigator.serviceWorker.ready;
+                            await registration.periodicSync.register('workpacker-alarm-check', {
+                                minInterval: 15 * 60 * 1000 // 15 minutes minimum
+                            });
+                        } catch(e) {
+                            // Periodic sync not supported or not permitted - that's OK
+                            console.log('Periodic sync not available:', e.message);
+                        }
+                    }
+                },
+
+                getNextAlarms() {
+                    const alarms = [];
+                    const now = new Date();
+                    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+
+                    if (this.vacationMode) return alarms;
+
+                    const formatDateStr = (d) => {
+                        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                    };
+
+                    const todayStr = formatDateStr(today);
+                    const tomorrowStr = formatDateStr(tomorrow);
+
+                    // Check if tomorrow is a work day
+                    const tomorrowDow = tomorrow.getDay();
+                    let tomorrowIsWorkDay = false;
+                    let tomorrowShiftName = '';
+
+                    if (this.calendarEntries && this.calendarEntries[tomorrowStr]) {
+                        tomorrowIsWorkDay = !!this.calendarEntries[tomorrowStr].isWorkDay;
+                        tomorrowShiftName = this.calendarEntries[tomorrowStr].shiftName || 'Turno';
+                    } else {
+                        const activeSchedules = this.savedSchedules.filter(s => s.active);
+                        const matched = activeSchedules.find(s => s.workDays.includes(tomorrowDow));
+                        if (matched) {
+                            tomorrowIsWorkDay = true;
+                            tomorrowShiftName = matched.name;
+                        }
+                    }
+
+                    // Check if today is a work day
+                    const todayDow = today.getDay();
+                    let todayIsWorkDay = false;
+                    let todayShiftName = '';
+                    let todayStartTime = '';
+
+                    if (this.calendarEntries && this.calendarEntries[todayStr]) {
+                        todayIsWorkDay = !!this.calendarEntries[todayStr].isWorkDay;
+                        todayShiftName = this.calendarEntries[todayStr].shiftName || 'Turno';
+                        todayStartTime = this.calendarEntries[todayStr].startTime || '';
+                    } else {
+                        const activeSchedules = this.savedSchedules.filter(s => s.active);
+                        const matched = activeSchedules.find(s => s.workDays.includes(todayDow));
+                        if (matched) {
+                            todayIsWorkDay = true;
+                            todayShiftName = matched.name;
+                            todayStartTime = matched.startTime;
+                        }
+                    }
+
+                    // Night before alarms (today's night for tomorrow's work)
+                    if (tomorrowIsWorkDay && this.schedule.notifyDayBefore) {
+                        this.schedule.nightNotifyTimes.forEach((time, idx) => {
+                            alarms.push({
+                                id: 'night_' + idx + '_' + todayStr,
+                                date: todayStr,
+                                time: time,
+                                title: '🌙 Mañana Trabajas — ' + tomorrowShiftName,
+                                message: '¡Prepara tu mochila esta noche! Revisa tu lista de chequeo en WorkPacker.'
+                            });
+                        });
+                    }
+
+                    // Same day alarms
+                    if (todayIsWorkDay && this.schedule.notifySameDay) {
+                        this.schedule.morningNotifyTimes.forEach((time, idx) => {
+                            const entryText = todayStartTime ? ` Entras a las ${todayStartTime}.` : '';
+                            alarms.push({
+                                id: 'morning_' + idx + '_' + todayStr,
+                                date: todayStr,
+                                time: time,
+                                title: '☀️ Hoy Trabajas — ' + todayShiftName,
+                                message: '¡Revisa tu mochila antes de salir!' + entryText + ' Abre WorkPacker y chequea tu lista.'
+                            });
+                        });
+                    }
+
+                    return alarms;
+                },
+
+                checkAndFireAlarms() {
+                    if (this.vacationMode) return;
+
+                    const now = new Date();
+                    const currentTimeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+                    const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+                    
+                    const alarms = this.getNextAlarms();
+                    
+                    alarms.forEach(alarm => {
+                        const alarmKey = alarm.id;
+                        if (alarm.time === currentTimeStr && alarm.date === todayStr && !this.firedAlarmKeys[alarmKey]) {
+                            // Mark as fired
+                            this.firedAlarmKeys[alarmKey] = Date.now();
+                            localStorage.setItem('workpacker_fired_alarms', JSON.stringify(this.firedAlarmKeys));
+                            
+                            // Fire the alarm!
+                            this.fireAlarm(alarm.title, alarm.message);
+                        }
+                    });
+                },
+
+                fireAlarm(title, message) {
+                    // 1. Play alarm sound
+                    this.playAlarmSound(this.schedule.alarmSound);
+
+                    // 2. Vibrate if enabled
+                    if (this.schedule.alarmVibrate && navigator.vibrate) {
+                        navigator.vibrate([300, 100, 300, 100, 300, 100, 300, 100, 300]);
+                    }
+
+                    // 3. Show native notification
+                    if (this.notificationPermission === 'granted') {
+                        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                            navigator.serviceWorker.controller.postMessage({
+                                type: 'FIRE_NOTIFICATION',
+                                title: title,
+                                body: message,
+                                tag: 'alarm-' + Date.now()
+                            });
+                        } else {
+                            // Fallback: use Notification API directly
+                            try {
+                                new Notification(title, {
+                                    body: message,
+                                    icon: './icon-192.png',
+                                    tag: 'alarm-' + Date.now(),
+                                    requireInteraction: true,
+                                    vibrate: [300, 100, 300, 100, 300]
+                                });
+                            } catch(e) {
+                                console.log('Direct notification failed:', e);
+                            }
+                        }
+                    }
+
+                    // 4. Show in-app alarm modal
+                    this.activeAlarmData = { title, message };
+                    this.showAlarmModal = true;
+
+                    // 5. In-app toast as well
+                    this.showToast(title, message);
+                },
+
+                syncAlarmsToServiceWorker() {
+                    const alarms = this.getNextAlarms();
+                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'SYNC_ALARMS',
+                            alarms: alarms
+                        });
+                    }
+                },
+
+                // ═══════════════════════════════════════
+                // ███ WEB AUDIO API - Alarm Sounds ███
+                // ═══════════════════════════════════════
+
+                playAlarmSound(soundType) {
+                    this.stopAlarmSound();
+                    
+                    try {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        if (!AudioContext) {
+                            console.log('Web Audio API not supported');
+                            return;
+                        }
+                        
+                        this.alarmAudioContext = new AudioContext();
+                        const ctx = this.alarmAudioContext;
+                        const volume = (this.schedule.alarmVolume || 80) / 100;
+                        
+                        // Master gain
+                        const masterGain = ctx.createGain();
+                        masterGain.gain.value = volume;
+                        masterGain.connect(ctx.destination);
+                        this.alarmGainNode = masterGain;
+                        
+                        switch(soundType) {
+                            case 'classic':
+                                this._playClassicAlarm(ctx, masterGain);
+                                break;
+                            case 'gentle':
+                                this._playGentleAlarm(ctx, masterGain);
+                                break;
+                            case 'urgent':
+                                this._playUrgentAlarm(ctx, masterGain);
+                                break;
+                            case 'bell':
+                                this._playBellAlarm(ctx, masterGain);
+                                break;
+                            case 'digital':
+                                this._playDigitalAlarm(ctx, masterGain);
+                                break;
+                            default:
+                                this._playClassicAlarm(ctx, masterGain);
+                        }
+                        
+                        this.isAlarmPlaying = true;
+                        
+                        // Auto-stop after 15 seconds
+                        setTimeout(() => {
+                            this.stopAlarmSound();
+                        }, 15000);
+                        
+                    } catch(e) {
+                        console.error('Error playing alarm sound:', e);
+                    }
+                },
+
+                _playClassicAlarm(ctx, dest) {
+                    // Classic alarm: alternating two tones
+                    const playBeep = (freq, startTime, duration) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'square';
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.3, startTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+                        osc.connect(gain);
+                        gain.connect(dest);
+                        osc.start(startTime);
+                        osc.stop(startTime + duration);
+                    };
+                    
+                    for (let rep = 0; rep < 6; rep++) {
+                        const base = rep * 2;
+                        playBeep(880, ctx.currentTime + base, 0.25);
+                        playBeep(880, ctx.currentTime + base + 0.3, 0.25);
+                        playBeep(880, ctx.currentTime + base + 0.6, 0.25);
+                        playBeep(660, ctx.currentTime + base + 1.0, 0.8);
+                    }
+                },
+
+                _playGentleAlarm(ctx, dest) {
+                    // Gentle: soft sine waves ascending
+                    const notes = [523.25, 587.33, 659.25, 698.46, 783.99];
+                    for (let rep = 0; rep < 3; rep++) {
+                        notes.forEach((freq, i) => {
+                            const startTime = ctx.currentTime + rep * 4 + i * 0.6;
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.value = freq;
+                            gain.gain.setValueAtTime(0, startTime);
+                            gain.gain.linearRampToValueAtTime(0.25, startTime + 0.15);
+                            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.55);
+                            osc.connect(gain);
+                            gain.connect(dest);
+                            osc.start(startTime);
+                            osc.stop(startTime + 0.6);
+                        });
+                    }
+                },
+
+                _playUrgentAlarm(ctx, dest) {
+                    // Urgent: rapid high-pitched beeps
+                    for (let rep = 0; rep < 10; rep++) {
+                        const base = rep * 1.2;
+                        for (let b = 0; b < 6; b++) {
+                            const startTime = ctx.currentTime + base + b * 0.15;
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.type = 'square';
+                            osc.frequency.value = 1200;
+                            gain.gain.setValueAtTime(0.35, startTime);
+                            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.08);
+                            osc.connect(gain);
+                            gain.connect(dest);
+                            osc.start(startTime);
+                            osc.stop(startTime + 0.1);
+                        }
+                    }
+                },
+
+                _playBellAlarm(ctx, dest) {
+                    // Bell: simulated bell with harmonics
+                    const playBell = (startTime) => {
+                        const freqs = [523.25, 1046.5, 1567.98, 2093];
+                        const gains = [0.4, 0.2, 0.1, 0.05];
+                        freqs.forEach((freq, i) => {
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.value = freq;
+                            gain.gain.setValueAtTime(gains[i], startTime);
+                            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 2.5);
+                            osc.connect(gain);
+                            gain.connect(dest);
+                            osc.start(startTime);
+                            osc.stop(startTime + 2.5);
+                        });
+                    };
+                    
+                    for (let rep = 0; rep < 5; rep++) {
+                        playBell(ctx.currentTime + rep * 3);
+                    }
+                },
+
+                _playDigitalAlarm(ctx, dest) {
+                    // Digital: retro game-style beeps
+                    const pattern = [
+                        { freq: 1047, dur: 0.1 },
+                        { freq: 1319, dur: 0.1 },
+                        { freq: 1568, dur: 0.2 },
+                        { freq: 0, dur: 0.2 },
+                        { freq: 1568, dur: 0.1 },
+                        { freq: 1319, dur: 0.1 },
+                        { freq: 1047, dur: 0.2 },
+                        { freq: 0, dur: 0.6 }
+                    ];
+                    
+                    for (let rep = 0; rep < 5; rep++) {
+                        let offset = rep * 1.6;
+                        pattern.forEach(note => {
+                            if (note.freq > 0) {
+                                const startTime = ctx.currentTime + offset;
+                                const osc = ctx.createOscillator();
+                                const gain = ctx.createGain();
+                                osc.type = 'triangle';
+                                osc.frequency.value = note.freq;
+                                gain.gain.setValueAtTime(0.3, startTime);
+                                gain.gain.exponentialRampToValueAtTime(0.01, startTime + note.dur * 0.9);
+                                osc.connect(gain);
+                                gain.connect(dest);
+                                osc.start(startTime);
+                                osc.stop(startTime + note.dur);
+                            }
+                            offset += note.dur;
+                        });
+                    }
+                },
+
+                stopAlarmSound() {
+                    if (this.alarmAudioContext) {
+                        try {
+                            this.alarmAudioContext.close();
+                        } catch(e) {}
+                        this.alarmAudioContext = null;
+                    }
+                    this.isAlarmPlaying = false;
+                },
+
+                dismissAlarm() {
+                    this.stopAlarmSound();
+                    this.showAlarmModal = false;
+                    this.activeAlarmData = null;
+                    if (navigator.vibrate) navigator.vibrate(0); // Stop vibration
+                },
+
+                previewAlarmSound(soundId) {
+                    this.playAlarmSound(soundId);
+                    // Auto-stop preview after 3 seconds
+                    setTimeout(() => {
+                        this.stopAlarmSound();
+                    }, 3000);
+                },
+
+                showToast(title, message) {
+                    this.toast.title = title;
+                    this.toast.message = message;
+                    this.toast.visible = true;
+                    setTimeout(() => {
+                        this.toast.visible = false;
+                    }, 4000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
