@@ -1,0 +1,81 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String          @id @default(uuid())
+  username        String          @unique
+  password        String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  settings        UserSettings?
+  catalogItems    CatalogItem[]
+  customModules   CustomModule[]
+  savedSchedules  SavedSchedule[]
+  calendarEntries CalendarEntry[]
+}
+
+model UserSettings {
+  id               String  @id @default(uuid())
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  darkMode         Boolean @default(false)
+  vacationMode     Boolean @default(false)
+  scheduleMode     String  @default("weekly")
+  activeTab        String  @default("home")
+  scheduleSettings String  @default("{}")
+}
+
+model CatalogItem {
+  id            String  @id @default(uuid())
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  category      String
+  icon          String
+  gradientClass String
+  packed        Boolean @default(false)
+}
+
+model CustomModule {
+  id             String  @id @default(uuid())
+  userId         String
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  subtitle       String?
+  icon           String
+  colorClass     String
+  enabled        Boolean @default(true)
+  selectedOption String?
+  options        String  @default("[]")
+}
+
+model SavedSchedule {
+  id         String  @id @default(uuid())
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  workDays   String  @default("[]")
+  startTime  String
+  endTime    String
+  colorClass String
+  active     Boolean @default(true)
+}
+
+model CalendarEntry {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateStr   String
+  isWorkDay Boolean @default(true)
+  shiftName String?
+  startTime String?
+  endTime   String?
+
+  @@unique([userId, dateStr])
+}
