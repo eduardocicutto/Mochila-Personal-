@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -11,71 +11,82 @@ model User {
   id              String          @id @default(uuid())
   username        String          @unique
   password        String
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
   settings        UserSettings?
   catalogItems    CatalogItem[]
   customModules   CustomModule[]
   savedSchedules  SavedSchedule[]
   calendarEntries CalendarEntry[]
+
+  @@map("users")
 }
 
 model UserSettings {
   id               String  @id @default(uuid())
-  userId           String  @unique
+  userId           String  @unique @map("user_id")
   user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  darkMode         Boolean @default(false)
-  vacationMode     Boolean @default(false)
-  scheduleMode     String  @default("weekly")
-  activeTab        String  @default("home")
-  scheduleSettings String  @default("{}")
+  darkMode         Boolean @default(false) @map("dark_mode")
+  vacationMode     Boolean @default(false) @map("vacation_mode")
+  scheduleMode     String  @default("weekly") @map("schedule_mode")
+  activeTab        String  @default("home") @map("active_tab")
+  scheduleSettings String  @default("{}") @map("schedule_settings")
+
+  @@map("user_settings")
 }
 
 model CatalogItem {
   id            String  @id @default(uuid())
-  userId        String
+  userId        String  @map("user_id")
   user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   name          String
   category      String
   icon          String
-  gradientClass String
+  gradientClass String  @map("gradient_class")
   packed        Boolean @default(false)
+
+  @@map("catalog_items")
 }
 
 model CustomModule {
   id             String  @id @default(uuid())
-  userId         String
+  userId         String  @map("user_id")
   user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   title          String
   subtitle       String?
   icon           String
-  colorClass     String
+  colorClass     String  @map("color_class")
   enabled        Boolean @default(true)
-  selectedOption String?
+  selectedOption String? @map("selected_option")
   options        String  @default("[]")
+
+  @@map("custom_modules")
 }
 
 model SavedSchedule {
   id         String  @id @default(uuid())
-  userId     String
+  userId     String  @map("user_id")
   user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
-  workDays   String  @default("[]")
-  startTime  String
-  endTime    String
-  colorClass String
+  workDays   String  @default("[]") @map("work_days")
+  startTime  String  @map("start_time")
+  endTime    String  @map("end_time")
+  colorClass String  @map("color_class")
   active     Boolean @default(true)
+
+  @@map("saved_schedules")
 }
 
 model CalendarEntry {
   id        String  @id @default(uuid())
-  userId    String
+  userId    String  @map("user_id")
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dateStr   String
-  isWorkDay Boolean @default(true)
-  shiftName String?
-  startTime String?
-  endTime   String?
+  dateStr   String  @map("date_str")
+  isWorkDay Boolean @default(true) @map("is_work_day")
+  shiftName String? @map("shift_name")
+  startTime String? @map("start_time")
+  endTime   String? @map("end_time")
 
   @@unique([userId, dateStr])
+  @@map("calendar_entries")
 }

@@ -6,7 +6,8 @@ export async function POST(request: Request) {
   try {
     await seedInitialUser();
 
-    const { username, password } = await request.json();
+    const body = await request.json();
+    const { username, password } = body;
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Usuario y contraseña requeridos' }, { status: 400 });
@@ -24,8 +25,11 @@ export async function POST(request: Request) {
     setSessionCookie(token);
 
     return NextResponse.json({ success: true, user: { id: user.id, username: user.username } });
-  } catch (err) {
-    console.error('Login error:', err);
-    return NextResponse.json({ error: 'Error interno en el servidor' }, { status: 500 });
+  } catch (err: any) {
+    console.error('Login error details:', err);
+    return NextResponse.json(
+      { error: err?.message ? `Error de Base de Datos: ${err.message}` : 'Error interno en el servidor' },
+      { status: 500 }
+    );
   }
 }

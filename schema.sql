@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
     vacation_mode BOOLEAN DEFAULT FALSE,
     schedule_mode VARCHAR(20) DEFAULT 'weekly',
     active_tab VARCHAR(20) DEFAULT 'home',
-    schedule_settings JSONB DEFAULT '{}'::jsonb
+    schedule_settings TEXT DEFAULT '{}'
 );
 
 -- 3. Tabla de Catálogo de Objetos
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS custom_modules (
     color_class VARCHAR(100) NOT NULL,
     enabled BOOLEAN DEFAULT TRUE,
     selected_option VARCHAR(100),
-    options JSONB DEFAULT '[]'::jsonb
+    options TEXT DEFAULT '[]'
 );
 
 -- 5. Tabla de Turnos Semanales Guardados
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS saved_schedules (
     id VARCHAR(100) PRIMARY KEY,
     user_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
-    work_days JSONB DEFAULT '[]'::jsonb,
+    work_days TEXT DEFAULT '[]',
     start_time VARCHAR(10) NOT NULL,
     end_time VARCHAR(10) NOT NULL,
     color_class VARCHAR(100) NOT NULL,
