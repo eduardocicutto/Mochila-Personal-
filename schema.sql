@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     id VARCHAR(100) PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) DEFAULT 'user',
+    last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,9 +73,56 @@ CREATE TABLE IF NOT EXISTS calendar_entries (
 );
 
 -- =========================================================
--- USUARIO INICIAL DE PRUEBA
--- Usuario: educicutto | Clave: 123456
+-- USUARIOS INICIALES Y CONFIGURACIÓN PRETERMINADA
+-- 1) Usuario: educicutto | Clave: 123456 | Rol: user
+-- 2) Usuario Master: master | Clave: 1234 | Rol: master
+-- NOTA: Las contraseñas se almacenan hasheadas con bcrypt
+-- en el seed automático de la aplicación (db.ts).
+-- Los valores de abajo son de referencia con texto plano.
 -- =========================================================
-INSERT INTO users (id, username, password)
-VALUES ('usr_educicutto', 'educicutto', '123456')
+
+-- Insertar Usuario Personal educicutto
+INSERT INTO users (id, username, password, role)
+VALUES ('usr_educicutto', 'educicutto', '$2a$10$placeholder_hash_educicutto', 'user')
 ON CONFLICT (username) DO NOTHING;
+
+-- Insertar Usuario Administrador Master
+INSERT INTO users (id, username, password, role)
+VALUES ('usr_master', 'master', '$2a$10$placeholder_hash_master', 'master')
+ON CONFLICT (username) DO NOTHING;
+
+-- Configuración por defecto para educicutto
+INSERT INTO user_settings (id, user_id, dark_mode, vacation_mode, schedule_mode, active_tab, schedule_settings)
+VALUES ('stg_educicutto', 'usr_educicutto', FALSE, FALSE, 'weekly', 'home', '{"notifyDayBefore":true,"nightNotifyTimes":["21:00"],"notifySameDay":true,"morningNotifyTimes":["07:00"],"startTime":"08:00","endTime":"17:00","alarmSound":"classic","alarmVolume":80,"alarmVibrate":true}')
+ON CONFLICT (id) DO NOTHING;
+
+-- Catálogo inicial para educicutto
+INSERT INTO catalog_items (id, user_id, name, category, icon, gradient_class, packed) VALUES
+('item_1', 'usr_educicutto', 'Llaves de la oficina y casa', 'essential', 'fa-solid fa-key', 'grad-sky', true),
+('item_2', 'usr_educicutto', 'Credencial de trabajo', 'essential', 'fa-solid fa-id-card', 'grad-lavender', true),
+('item_3', 'usr_educicutto', 'Cargador de celular y laptop', 'essential', 'fa-solid fa-charging-station', 'grad-teal', false),
+('item_4', 'usr_educicutto', 'Botella con agua helada', 'essential', 'fa-solid fa-bottle-water', 'grad-mint', false),
+('item_5', 'usr_educicutto', 'Sartén antiadherente pequeña', 'cook', 'fa-solid fa-kitchen-set', 'grad-peach', false),
+('item_6', 'usr_educicutto', 'Salero y especiero', 'cook', 'fa-solid fa-bottle-droplet', 'grad-amber', false),
+('item_7', 'usr_educicutto', 'Espátula y aceite de cocina', 'cook', 'fa-solid fa-fire-burner', 'grad-rose', false),
+('item_8', 'usr_educicutto', 'Ingredientes frescos (Comida cruda)', 'cook', 'fa-solid fa-apple-whole', 'grad-mint', false),
+('item_9', 'usr_educicutto', 'Tupperware con la comida lista', 'tupperware', 'fa-solid fa-box-archive', 'grad-sky', false),
+('item_10', 'usr_educicutto', 'Juego de cubiertos y servilleta', 'tupperware', 'fa-solid fa-spoon', 'grad-lavender', false),
+('item_11', 'usr_educicutto', 'Juego de llaves y desarmadores (Moto)', 'tools_moto', 'fa-solid fa-screwdriver-wrench', 'grad-teal', false),
+('item_12', 'usr_educicutto', 'Lubricante de cadena / Manómetro', 'tools_moto', 'fa-solid fa-oil-can', 'grad-amber', false),
+('item_13', 'usr_educicutto', 'Multímetro, cautín y estaño (Electrónica)', 'tools_elec', 'fa-solid fa-microchip', 'grad-lavender', false),
+('item_14', 'usr_educicutto', 'Cinta aislante y conectores', 'tools_elec', 'fa-solid fa-plug', 'grad-sky', false),
+('item_15', 'usr_educicutto', 'Mochila del Gym y Toalla', 'gym_yes', 'fa-solid fa-dumbbell', 'grad-rose', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Módulos predeterminados para educicutto
+INSERT INTO custom_modules (id, user_id, title, subtitle, icon, color_class, enabled, selected_option, options) VALUES
+('mod_cook_edu', 'usr_educicutto', 'Sección Cocina / Vianda', 'Pregunta si vas a cocinar o llevar comida', 'fa-solid fa-utensils', 'grad-amber', true, 'cook', '[{"id":"cook","name":"Sí, cocino","icon":"fa-solid fa-fire-burner","enabled":true},{"id":"tupperware","name":"Llevo vianda","icon":"fa-solid fa-box-archive","enabled":true},{"id":"none","name":"Compro allá","icon":"fa-solid fa-shop","enabled":true}]'),
+('mod_tools_edu', 'usr_educicutto', 'Sección Herramientas', 'Pregunta si llevas cosas para moto o electrónica', 'fa-solid fa-screwdriver-wrench', 'grad-teal', true, 'none', '[{"id":"none","name":"Hoy no","icon":"fa-solid fa-ban","enabled":true},{"id":"moto","name":"Para Moto","icon":"fa-solid fa-motorcycle","enabled":true},{"id":"electronics","name":"Electrónica","icon":"fa-solid fa-microchip","enabled":true}]'),
+('mod_gym_edu', 'usr_educicutto', '¿Vas al Gimnasio hoy?', 'Lleva tu ropa deportiva y accesorios', 'fa-solid fa-dumbbell', 'grad-rose', true, 'gym_no', '[{"id":"gym_no","name":"Hoy no","icon":"fa-solid fa-ban","enabled":true},{"id":"gym_yes","name":"Sí, al Gym","icon":"fa-solid fa-dumbbell","enabled":true}]')
+ON CONFLICT (id) DO NOTHING;
+
+-- Turno guardado por defecto para educicutto
+INSERT INTO saved_schedules (id, user_id, name, work_days, start_time, end_time, color_class, active) VALUES
+('sch_edu_1', 'usr_educicutto', 'Turno Regular (L-V)', '[1,2,3,4,5]', '08:00', '17:00', 'grad-sky', true)
+ON CONFLICT (id) DO NOTHING;

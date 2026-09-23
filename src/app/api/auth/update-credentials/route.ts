@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
 import { getAuthenticatedUser, createSessionToken, setSessionCookie } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 
@@ -34,16 +35,23 @@ export async function POST(request: Request) {
       }
     }
 
+    // Hash the new password with bcrypt
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
     const updatedUser = await prisma.user.update({
       where: { id: sessionUser.id },
       data: {
         username: usernameTrimmed,
-        password: newPassword,
+        password: hashedPassword,
       },
     });
 
     // Actualizar cookie de sesión con el nuevo username
-    const token = await createSessionToken({ id: updatedUser.id, username: updatedUser.username });
+    const token = await createSessionToken({
+      id: updatedUser.id,
+      username: updatedUser.username,
+      role: updatedUser.role,
+    });
     setSessionCookie(token);
 
     return NextResponse.json({

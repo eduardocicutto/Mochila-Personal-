@@ -59,16 +59,47 @@ export default function LoginPage() {
         </div>
 
         {/* Demo Credentials Card */}
-        <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-3.5 text-xs text-blue-900 flex items-start gap-2.5 shadow-sm">
-          <i className="fa-solid fa-circle-info text-blue-600 text-sm mt-0.5"></i>
-          <div>
-            <p className="font-semibold text-blue-800">Acceso por defecto:</p>
-            <p className="mt-0.5 text-blue-700 font-mono">
-              Usuario: <strong className="font-bold">educicutto</strong> | Clave: <strong className="font-bold">123456</strong>
-            </p>
-            <p className="text-[10px] text-blue-600 mt-1 opacity-90">
-              * Puedes cambiar tu usuario y clave dentro de la app en Ajustes.
-            </p>
+        <div className="space-y-2">
+          <div
+            onClick={() => {
+              setUsername('educicutto');
+              setPassword('123456');
+            }}
+            className="bg-blue-50/80 border border-blue-200/80 hover:bg-blue-100/80 cursor-pointer rounded-2xl p-3 text-xs text-blue-900 flex items-center justify-between shadow-xs transition"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+                <i className="fa-solid fa-user text-xs"></i>
+              </div>
+              <div>
+                <p className="font-bold text-blue-900">Usuario Personal</p>
+                <p className="text-[11px] text-blue-700 font-mono">
+                  educicutto / 123456
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-semibold text-blue-600 bg-blue-200/60 px-2 py-0.5 rounded-lg">Cargar</span>
+          </div>
+
+          <div
+            onClick={() => {
+              setUsername('master');
+              setPassword('1234');
+            }}
+            className="bg-amber-50/80 border border-amber-200/80 hover:bg-amber-100/80 cursor-pointer rounded-2xl p-3 text-xs text-amber-900 flex items-center justify-between shadow-xs transition"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center">
+                <i className="fa-solid fa-crown text-xs"></i>
+              </div>
+              <div>
+                <p className="font-bold text-amber-900">Usuario Administrador</p>
+                <p className="text-[11px] text-amber-800 font-mono">
+                  master / 1234
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-semibold text-amber-700 bg-amber-200/60 px-2 py-0.5 rounded-lg">Cargar</span>
           </div>
         </div>
 

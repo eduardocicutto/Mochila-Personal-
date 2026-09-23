@@ -11,10 +11,11 @@ const COOKIE_NAME = 'workpacker_session';
 export interface UserPayload {
   id: string;
   username: string;
+  role: string;
 }
 
 export async function createSessionToken(payload: UserPayload): Promise<string> {
-  return await new SignJWT({ id: payload.id, username: payload.username })
+  return await new SignJWT({ id: payload.id, username: payload.username, role: payload.role })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('30d')
@@ -27,6 +28,7 @@ export async function verifySessionToken(token: string): Promise<UserPayload | n
     return {
       id: payload.id as string,
       username: payload.username as string,
+      role: (payload.role as string) || 'user',
     };
   } catch (err) {
     return null;
@@ -34,7 +36,7 @@ export async function verifySessionToken(token: string): Promise<UserPayload | n
 }
 
 export async function getAuthenticatedUser(): Promise<UserPayload | null> {
-  // Asegurarse de que exista el usuario inicial 'educicutto'
+  // Asegurarse de que existan los usuarios iniciales
   await seedInitialUser();
 
   const cookieStore = cookies();

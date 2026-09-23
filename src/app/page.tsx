@@ -61,12 +61,35 @@ interface ScheduleSettings {
   alarmVibrate: boolean;
 }
 
+interface AdminUserData {
+  id: string;
+  username: string;
+  role: string;
+  lastLoginAt: string | null;
+  createdAt: string;
+  itemCount: number;
+  moduleCount: number;
+  scheduleCount: number;
+  packedStats: { packed: number; total: number };
+}
+
+interface AdminData {
+  stats: {
+    totalUsers: number;
+    totalCatalogItems: number;
+    totalCustomModules: number;
+    totalSavedSchedules: number;
+    totalCalendarEntries: number;
+  };
+  users: AdminUserData[];
+}
+
 export default function WorkPackerApp() {
   const router = useRouter();
 
   // Loading & Auth State
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string } | null>(null);
 
   // App Main States
   const [darkMode, setDarkMode] = useState(false);
@@ -139,12 +162,19 @@ export default function WorkPackerApp() {
     endTime: '17:00',
   });
 
-  // User Credentials Change Form State (in Settings tab)
+  // User Credentials Change Form State
   const [accountForm, setAccountForm] = useState({
     username: '',
     password: '',
   });
   const [accountStatus, setAccountStatus] = useState({ success: '', error: '', loading: false });
+
+  // Admin Master States
+  const [adminData, setAdminData] = useState<AdminData | null>(null);
+  const [newUserForm, setNewUserForm] = useState({ username: '', password: '' });
+  const [adminStatus, setAdminStatus] = useState({ success: '', error: '', loading: false });
+  const [editingUserPassId, setEditingUserPassId] = useState<string | null>(null);
+  const [editingUserPassVal, setEditingUserPassVal] = useState('');
 
   // Catalog, Modules & Schedules
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
@@ -253,7 +283,20 @@ export default function WorkPackerApp() {
     }, 4000);
   };
 
-  // Load Initial Data from API & LocalStorage Fallback
+  // Fetch Master Admin Data
+  const fetchAdminData = async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        setAdminData(data);
+      }
+    } catch (err) {
+      console.error('Error fetching admin data:', err);
+    }
+  };
+
+  // Load Initial Data from API
   useEffect(() => {
     async function loadData() {
       try {
@@ -271,6 +314,11 @@ export default function WorkPackerApp() {
 
         setCurrentUser(authData.user);
         setAccountForm({ username: authData.user.username, password: '' });
+
+        // If master user, load admin statistics
+        if (authData.user.role === 'master') {
+          fetchAdminData();
+        }
 
         // Fetch DB Data
         const dataRes = await fetch('/api/data');
@@ -312,7 +360,7 @@ export default function WorkPackerApp() {
     loadData();
   }, [router]);
 
-  // Sync to Database & LocalStorage on State Change
+  // Sync to Database on State Change
   const syncToDatabase = async (overrideData?: any) => {
     if (!currentUser) return;
     try {
@@ -335,6 +383,10 @@ export default function WorkPackerApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      if (currentUser.role === 'master') {
+        fetchAdminData();
+      }
     } catch (e) {
       console.error('Failed to sync to database:', e);
     }
@@ -899,7 +951,7 @@ export default function WorkPackerApp() {
     e.target.value = '';
   };
 
-  // Update Account Credentials (in Settings Tab)
+  // Update Account Credentials
   const handleUpdateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setAccountStatus({ success: '', error: '', loading: true });
@@ -937,6 +989,81 @@ export default function WorkPackerApp() {
     }
   };
 
+  // Admin Master Handlers
+  const handleAdminCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdminStatus({ success: '', error: '', loading: true });
+
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUserForm),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAdminStatus({ success: '', error: data.error || 'Error al crear usuario', loading: false });
+        return;
+      }
+
+      setAdminStatus({ success: data.message, error: '', loading: false });
+      setNewUserForm({ username: '', password: '' });
+      fetchAdminData();
+      showToastMsg('Usuario Creado 👑', `El usuario ${data.user.username} ha sido registrado.`);
+    } catch (err) {
+      setAdminStatus({ success: '', error: 'Error de conexión con el servidor', loading: false });
+    }
+  };
+
+  const handleAdminChangeUserPass = async (userId: string) => {
+    if (!editingUserPassVal || editingUserPassVal.length < 4) {
+      showToastMsg('Error de Clave', 'La nueva contraseña debe tener al menos 4 caracteres.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, newPassword: editingUserPassVal }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setEditingUserPassId(null);
+        setEditingUserPassVal('');
+        fetchAdminData();
+        showToastMsg('Clave Cambiada 🔑', data.message);
+      } else {
+        showToastMsg('Error', data.error || 'No se pudo cambiar la clave.');
+      }
+    } catch (err) {
+      showToastMsg('Error', 'Error de conexión.');
+    }
+  };
+
+  const handleAdminDeleteUser = async (userId: string, username: string) => {
+    if (!confirm(`¿Estás seguro de que deseas eliminar al usuario @${username}?`)) return;
+
+    try {
+      const res = await fetch(`/api/admin/users?userId=${userId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        fetchAdminData();
+        showToastMsg('Usuario Eliminado 🗑️', data.message);
+      } else {
+        showToastMsg('Error', data.error || 'No se pudo eliminar el usuario.');
+      }
+    } catch (err) {
+      showToastMsg('Error', 'Error de conexión.');
+    }
+  };
+
   // Logout
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -968,7 +1095,14 @@ export default function WorkPackerApp() {
           <div>
             <div className="flex items-center gap-1.5">
               <h1 className="text-lg font-bold text-slate-800 leading-tight">WorkPacker</h1>
-              <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+              <span
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  currentUser?.role === 'master'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : 'bg-blue-100 text-blue-700'
+                }`}
+              >
+                {currentUser?.role === 'master' && <i className="fa-solid fa-crown text-[9px] text-amber-600"></i>}
                 @{currentUser?.username}
               </span>
             </div>
@@ -1731,6 +1865,301 @@ export default function WorkPackerApp() {
               <h2 className="text-base font-bold text-slate-800">Ajustes</h2>
               <p className="text-xs text-slate-500">Administra modo vacaciones, módulos, usuario y respaldos</p>
             </div>
+
+            {/* MASTER ADMIN DASHBOARD PANEL */}
+            {currentUser?.role === 'master' && (
+              <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-4 border border-amber-500/30 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                {/* Master Header */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg shadow-sm border border-amber-500/30">
+                      <i className="fa-solid fa-crown"></i>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                        Panel Administrador Master
+                      </h3>
+                      <p className="text-[11px] text-slate-400">Gestión de usuarios y estadísticas globales</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={fetchAdminData}
+                    className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-xs transition"
+                    title="Actualizar datos"
+                  >
+                    <i className="fa-solid fa-rotate"></i>
+                  </button>
+                </div>
+
+                {/* Admin Statistics Cards */}
+                {adminData?.stats && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-slate-800/80 border border-slate-700/60 p-3 rounded-2xl space-y-1">
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span className="text-[10px] font-semibold uppercase">Usuarios</span>
+                          <i className="fa-solid fa-users text-amber-400 text-xs"></i>
+                        </div>
+                        <p className="text-xl font-extrabold text-white">{adminData.stats.totalUsers}</p>
+                      </div>
+
+                      <div className="bg-slate-800/80 border border-slate-700/60 p-3 rounded-2xl space-y-1">
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span className="text-[10px] font-semibold uppercase">Objetos Totales</span>
+                          <i className="fa-solid fa-boxes-packing text-blue-400 text-xs"></i>
+                        </div>
+                        <p className="text-xl font-extrabold text-white">{adminData.stats.totalCatalogItems}</p>
+                      </div>
+
+                      <div className="bg-slate-800/80 border border-slate-700/60 p-3 rounded-2xl space-y-1">
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span className="text-[10px] font-semibold uppercase">Módulos Activos</span>
+                          <i className="fa-solid fa-cubes text-emerald-400 text-xs"></i>
+                        </div>
+                        <p className="text-xl font-extrabold text-white">{adminData.stats.totalCustomModules}</p>
+                      </div>
+
+                      <div className="bg-slate-800/80 border border-slate-700/60 p-3 rounded-2xl space-y-1">
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span className="text-[10px] font-semibold uppercase">Turnos Creados</span>
+                          <i className="fa-solid fa-clock text-indigo-400 text-xs"></i>
+                        </div>
+                        <p className="text-xl font-extrabold text-white">{adminData.stats.totalSavedSchedules}</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-800/80 border border-slate-700/60 p-3 rounded-2xl space-y-1 text-xs">
+                      <div className="flex justify-between items-center text-slate-400">
+                        <span className="text-[10px] font-semibold uppercase">Entradas de Calendario</span>
+                        <i className="fa-solid fa-calendar-check text-cyan-400 text-xs"></i>
+                      </div>
+                      <p className="text-xl font-extrabold text-white">{adminData.stats.totalCalendarEntries}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Create New User Form */}
+                <div className="bg-slate-800/90 border border-slate-700/80 p-3.5 rounded-2xl space-y-3">
+                  <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <i className="fa-solid fa-user-plus"></i> Crear Nuevo Usuario
+                  </h4>
+
+                  {adminStatus.error && (
+                    <div className="bg-rose-950/80 border border-rose-800 text-rose-300 px-3 py-2 rounded-xl text-[11px] flex items-center gap-2">
+                      <i className="fa-solid fa-circle-exclamation"></i>
+                      <span>{adminStatus.error}</span>
+                    </div>
+                  )}
+
+                  {adminStatus.success && (
+                    <div className="bg-emerald-950/80 border border-emerald-800 text-emerald-300 px-3 py-2 rounded-xl text-[11px] flex items-center gap-2">
+                      <i className="fa-solid fa-circle-check"></i>
+                      <span>{adminStatus.success}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleAdminCreateUser} className="space-y-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newUserForm.username}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
+                        required
+                        placeholder="Nuevo Usuario"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                      />
+                      <input
+                        type="password"
+                        value={newUserForm.password}
+                        onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                        required
+                        placeholder="Contraseña"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={adminStatus.loading}
+                      className="w-full bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold py-2 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20"
+                    >
+                      {adminStatus.loading ? (
+                        <span>Registrando...</span>
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-plus text-xs"></i>
+                          <span>Registrar Usuario</span>
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Users List */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Usuarios Registrados ({adminData?.users.length || 0})
+                    </h4>
+                    <button
+                      onClick={() => {
+                        if (!adminData) return;
+                        const exportData = {
+                          exportedAt: new Date().toISOString(),
+                          stats: adminData.stats,
+                          users: adminData.users.map(u => ({
+                            username: u.username,
+                            role: u.role,
+                            createdAt: u.createdAt,
+                            lastLoginAt: u.lastLoginAt,
+                            items: u.itemCount,
+                            modules: u.moduleCount,
+                            schedules: u.scheduleCount,
+                            packedPercent: u.packedStats.total > 0 ? Math.round((u.packedStats.packed / u.packedStats.total) * 100) : 0,
+                          })),
+                        };
+                        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `workpacker_users_${new Date().toISOString().slice(0,10)}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        showToastMsg('Exportado 📁', 'Lista de usuarios exportada como JSON.');
+                      }}
+                      className="text-[10px] font-semibold text-slate-400 hover:text-amber-400 flex items-center gap-1 transition"
+                      title="Exportar usuarios como JSON"
+                    >
+                      <i className="fa-solid fa-file-export text-[10px]"></i> Exportar
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
+                    {adminData?.users.map((u) => {
+                      const packedPct = u.packedStats.total > 0 ? Math.round((u.packedStats.packed / u.packedStats.total) * 100) : 0;
+
+                      // Format relative last login time
+                      let lastLoginText = 'Nunca';
+                      if (u.lastLoginAt) {
+                        const diff = Date.now() - new Date(u.lastLoginAt).getTime();
+                        const mins = Math.floor(diff / 60000);
+                        if (mins < 1) lastLoginText = 'Justo ahora';
+                        else if (mins < 60) lastLoginText = `Hace ${mins} min`;
+                        else if (mins < 1440) lastLoginText = `Hace ${Math.floor(mins / 60)}h`;
+                        else lastLoginText = `Hace ${Math.floor(mins / 1440)}d`;
+                      }
+
+                      const isRecentlyActive = u.lastLoginAt && (Date.now() - new Date(u.lastLoginAt).getTime()) < 3600000;
+
+                      return (
+                        <div
+                          key={u.id}
+                          className="bg-slate-800/90 border border-slate-700/60 p-3 rounded-2xl flex flex-col space-y-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="relative">
+                                <div
+                                  className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold ${
+                                    u.role === 'master' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
+                                  }`}
+                                >
+                                  <i className={u.role === 'master' ? 'fa-solid fa-crown' : 'fa-solid fa-user'}></i>
+                                </div>
+                                {isRecentlyActive && (
+                                  <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-slate-800 animate-pulse"></div>
+                                )}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-bold text-slate-200">@{u.username}</p>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                                    u.role === 'master' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700 text-slate-400'
+                                  }`}>
+                                    {u.role === 'master' ? 'ADMIN' : 'USER'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-400">
+                                  {u.itemCount} objetos &bull; {u.moduleCount} módulos &bull; {lastLoginText}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  if (editingUserPassId === u.id) {
+                                    setEditingUserPassId(null);
+                                  } else {
+                                    setEditingUserPassId(u.id);
+                                    setEditingUserPassVal('');
+                                  }
+                                }}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-[10px] font-semibold transition"
+                                title="Cambiar Contraseña"
+                              >
+                                <i className="fa-solid fa-key mr-1"></i> Clave
+                              </button>
+
+                              {u.role !== 'master' && (
+                                <button
+                                  onClick={() => handleAdminDeleteUser(u.id, u.username)}
+                                  className="w-6 h-6 bg-rose-950 hover:bg-rose-900 text-rose-400 rounded-lg flex items-center justify-center text-[10px] transition"
+                                  title="Eliminar Usuario"
+                                >
+                                  <i className="fa-solid fa-trash"></i>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Packed items progress bar */}
+                          {u.packedStats.total > 0 && (
+                            <div className="pt-1">
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                                <span>Mochila armada</span>
+                                <span className={`font-bold ${packedPct === 100 ? 'text-emerald-400' : packedPct > 50 ? 'text-blue-400' : 'text-slate-400'}`}>
+                                  {u.packedStats.packed}/{u.packedStats.total} ({packedPct}%)
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    packedPct === 100 ? 'bg-emerald-400' : packedPct > 50 ? 'bg-blue-400' : 'bg-amber-400'
+                                  }`}
+                                  style={{ width: `${packedPct}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Password reset input for this user */}
+                          {editingUserPassId === u.id && (
+                            <div className="flex gap-1.5 pt-1.5 border-t border-slate-700/60">
+                              <input
+                                type="password"
+                                value={editingUserPassVal}
+                                onChange={(e) => setEditingUserPassVal(e.target.value)}
+                                placeholder="Nueva Clave"
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none"
+                              />
+                              <button
+                                onClick={() => handleAdminChangeUserPass(u.id)}
+                                className="bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg text-xs hover:bg-amber-600 transition"
+                              >
+                                Guardar
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* USER CREDENTIALS EDIT CARD */}
             <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">

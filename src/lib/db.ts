@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
@@ -10,27 +11,41 @@ export const prisma =
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
+const BCRYPT_ROUNDS = 10;
+
 /**
- * Asegura que el usuario inicial de prueba 'educicutto' exista en la BD.
+ * Asegura que los usuarios iniciales ('educicutto' y 'master') y sus datos existan en la BD.
  */
 export async function seedInitialUser() {
   try {
-    const existing = await prisma.user.findUnique({
+    // 1. Crear o verificar usuario 'educicutto'
+    let eduUser = await prisma.user.findUnique({
       where: { username: 'educicutto' },
     });
 
-    if (!existing) {
-      const newUser = await prisma.user.create({
+    if (!eduUser) {
+      const hashedPassword = await bcrypt.hash('123456', BCRYPT_ROUNDS);
+      eduUser = await prisma.user.create({
         data: {
           username: 'educicutto',
-          password: '123456', // Contraseña inicial requerida por el usuario
+          password: hashedPassword,
+          role: 'user',
         },
       });
+    }
 
-      // Crear preferencias iniciales
-      await prisma.userSettings.create({
-        data: {
-          userId: newUser.id,
+    // Verificar si educicutto tiene sus cosas configuradas
+    const eduItemCount = await prisma.catalogItem.count({
+      where: { userId: eduUser.id },
+    });
+
+    if (eduItemCount === 0) {
+      // Crear preferencias iniciales para educicutto
+      await prisma.userSettings.upsert({
+        where: { userId: eduUser.id },
+        update: {},
+        create: {
+          userId: eduUser.id,
           darkMode: false,
           vacationMode: false,
           scheduleMode: 'weekly',
@@ -49,7 +64,7 @@ export async function seedInitialUser() {
         },
       });
 
-      // Crear catálogo de objetos iniciales
+      // Crear catálogo de objetos completos para educicutto
       const defaultItems = [
         { name: 'Llaves de la oficina y casa', category: 'essential', icon: 'fa-solid fa-key', gradientClass: 'grad-sky', packed: true },
         { name: 'Credencial de trabajo', category: 'essential', icon: 'fa-solid fa-id-card', gradientClass: 'grad-lavender', packed: true },
@@ -71,16 +86,16 @@ export async function seedInitialUser() {
       for (const item of defaultItems) {
         await prisma.catalogItem.create({
           data: {
-            userId: newUser.id,
+            userId: eduUser.id,
             ...item,
           },
         });
       }
 
-      // Crear módulos personalizados por defecto
+      // Crear módulos personalizados para educicutto
       const defaultModules = [
         {
-          id: 'mod_cooking',
+          id: `mod_cooking_${eduUser.id}`,
           title: 'Sección Cocina / Vianda',
           subtitle: 'Pregunta si vas a cocinar o llevar comida',
           icon: 'fa-solid fa-utensils',
@@ -94,7 +109,7 @@ export async function seedInitialUser() {
           ]),
         },
         {
-          id: 'mod_tools',
+          id: `mod_tools_${eduUser.id}`,
           title: 'Sección Herramientas',
           subtitle: 'Pregunta si llevas cosas para moto o electrónica',
           icon: 'fa-solid fa-screwdriver-wrench',
@@ -108,7 +123,7 @@ export async function seedInitialUser() {
           ]),
         },
         {
-          id: 'mod_gym',
+          id: `mod_gym_${eduUser.id}`,
           title: '¿Vas al Gimnasio hoy?',
           subtitle: 'Lleva tu ropa deportiva y accesorios',
           icon: 'fa-solid fa-dumbbell',
@@ -125,16 +140,16 @@ export async function seedInitialUser() {
       for (const mod of defaultModules) {
         await prisma.customModule.create({
           data: {
-            userId: newUser.id,
+            userId: eduUser.id,
             ...mod,
           },
         });
       }
 
-      // Turno guardado por defecto
+      // Turno guardado por defecto para educicutto
       await prisma.savedSchedule.create({
         data: {
-          userId: newUser.id,
+          userId: eduUser.id,
           name: 'Turno Regular (L-V)',
           workDays: JSON.stringify([1, 2, 3, 4, 5]),
           startTime: '08:00',
@@ -144,7 +159,44 @@ export async function seedInitialUser() {
         },
       });
     }
+
+    // 2. Crear usuario Administrador 'master'
+    const existingMaster = await prisma.user.findUnique({
+      where: { username: 'master' },
+    });
+
+    if (!existingMaster) {
+      const hashedMasterPassword = await bcrypt.hash('1234', BCRYPT_ROUNDS);
+      const masterUser = await prisma.user.create({
+        data: {
+          username: 'master',
+          password: hashedMasterPassword,
+          role: 'master',
+        },
+      });
+
+      await prisma.userSettings.create({
+        data: {
+          userId: masterUser.id,
+          darkMode: false,
+          vacationMode: false,
+          scheduleMode: 'weekly',
+          activeTab: 'home',
+          scheduleSettings: JSON.stringify({
+            notifyDayBefore: true,
+            nightNotifyTimes: ['21:00'],
+            notifySameDay: true,
+            morningNotifyTimes: ['07:00'],
+            startTime: '08:00',
+            endTime: '17:00',
+            alarmSound: 'digital',
+            alarmVolume: 90,
+            alarmVibrate: true,
+          }),
+        },
+      });
+    }
   } catch (err) {
-    console.error('Error seeding initial user:', err);
+    console.error('Error seeding initial users:', err);
   }
 }
