@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- 2. Tabla de Preferencias de Usuario
 CREATE TABLE IF NOT EXISTS user_settings (
     id VARCHAR(100) PRIMARY KEY,
-    user_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
+    user_id VARCHAR(100) UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     dark_mode BOOLEAN DEFAULT FALSE,
     vacation_mode BOOLEAN DEFAULT FALSE,
     schedule_mode VARCHAR(20) DEFAULT 'weekly',
