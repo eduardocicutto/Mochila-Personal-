@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { playAlarmSound, stopAlarmSound, previewAlarmSound } from '@/lib/audio';
 import { Reminder, findDueReminders, reminderDaysLabel, MAX_DAYS_BEFORE } from '@/lib/reminders';
+import { mergeBackup } from '@/lib/backup';
 
 type PushStatus = 'checking' | 'unsupported' | 'unconfigured' | 'inactive' | 'active';
 
@@ -980,22 +981,15 @@ export default function WorkPackerApp() {
     return categories;
   };
 
-  // Export / Import Backup JSON
+  // Export / Import Backup JSON (only items and modules; schedules, calendar and settings stay out)
   const exportData = () => {
     triggerHaptic();
     const backup = {
       app: 'WorkPacker',
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       catalogItems,
       customModules,
-      savedSchedules,
-      calendarEntries,
-      reminders,
-      schedule,
-      scheduleMode,
-      darkMode,
-      vacationMode,
     };
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backup, null, 2));
     const downloadAnchor = document.createElement('a');
@@ -1004,7 +998,7 @@ export default function WorkPackerApp() {
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    showToastMsg('Copia Creada 💾', 'Se descargó la copia de seguridad correctamente.');
+    showToastMsg('Copia Creada 💾', `Se descargaron ${catalogItems.length} objetos y ${customModules.length} módulos.`);
   };
 
   const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1020,74 +1014,38 @@ export default function WorkPackerApp() {
         return;
       }
 
-      const hasContent = ['catalogItems', 'customModules', 'savedSchedules', 'calendarEntries', 'reminders'].some(
-        (k) => data && data[k]
-      );
-      if (!hasContent) {
-        showToastMsg('Error de Archivo', 'El archivo no es una copia de seguridad de WorkPacker.');
+      const backupItems: CatalogItem[] = Array.isArray(data?.catalogItems) ? data.catalogItems : [];
+      const backupModules: CustomModule[] = Array.isArray(data?.customModules) ? data.customModules : [];
+      if (backupItems.length === 0 && backupModules.length === 0) {
+        showToastMsg('Error de Archivo', 'El archivo no tiene objetos ni módulos de WorkPacker.');
         return;
       }
 
-      // Ids are unique across all accounts, so a backup (maybe from another user) gets fresh ones
-      const stamp = Date.now().toString(36);
-      let counter = 0;
-      const freshId = (prefix: string) => `${prefix}_${stamp}_${counter++}`;
+      // Older backups also carry schedules, calendar and settings: those are ignored on purpose
+      const result = mergeBackup(
+        { items: catalogItems, modules: customModules },
+        { items: backupItems, modules: backupModules }
+      );
 
-      const importedItems: CatalogItem[] = Array.isArray(data.catalogItems)
-        ? data.catalogItems.map((i: CatalogItem) => ({ ...i, id: freshId('item') }))
-        : catalogItems;
-      const importedModules: CustomModule[] = Array.isArray(data.customModules)
-        ? data.customModules.map((m: CustomModule) => ({ ...m, id: freshId('mod') }))
-        : customModules;
-      const importedSchedules: SavedSchedule[] = Array.isArray(data.savedSchedules)
-        ? data.savedSchedules.map((sch: SavedSchedule) => ({ ...sch, id: freshId('sch') }))
-        : savedSchedules;
-      const importedCalendar: Record<string, CalendarEntry> =
-        data.calendarEntries && typeof data.calendarEntries === 'object' ? data.calendarEntries : calendarEntries;
-      // Backups made before reminders existed keep the current reminders
-      const importedReminders: Reminder[] = Array.isArray(data.reminders)
-        ? data.reminders.map((r: Reminder) => ({ ...r, id: freshId('rem') }))
-        : reminders;
-      const importedSchedule: ScheduleSettings = { ...schedule, ...(data.schedule || {}) };
-      const importedDarkMode = typeof data.darkMode === 'boolean' ? data.darkMode : darkMode;
-      const importedVacationMode = typeof data.vacationMode === 'boolean' ? data.vacationMode : vacationMode;
-      const importedScheduleMode = data.scheduleMode === 'calendar' || data.scheduleMode === 'weekly' ? data.scheduleMode : scheduleMode;
+      if (result.addedItems === 0 && result.addedModules === 0 && result.mergedModules === 0) {
+        showToastMsg('Nada Nuevo', 'Todos los objetos y módulos de la copia ya estaban en tu cuenta.');
+        return;
+      }
 
       // Save first; the screen only changes once the server has the data
-      const saved = await syncToDatabase({
-        settings: {
-          darkMode: importedDarkMode,
-          vacationMode: importedVacationMode,
-          scheduleMode: importedScheduleMode,
-          activeTab,
-          scheduleSettings: importedSchedule,
-          timezone: getBrowserTimezone(),
-        },
-        catalogItems: importedItems,
-        customModules: importedModules,
-        savedSchedules: importedSchedules,
-        calendarEntries: importedCalendar,
-        reminders: importedReminders,
-      });
-
+      const saved = await syncToDatabase({ catalogItems: result.items, customModules: result.modules });
       if (!saved) {
         showToastMsg('Error al Importar', 'No se pudo guardar la copia. Tus datos actuales no se modificaron.');
         return;
       }
 
-      setCatalogItems(importedItems);
-      setCustomModules(importedModules);
-      setSavedSchedules(importedSchedules);
-      setCalendarEntries(importedCalendar);
-      setReminders(importedReminders);
-      setSchedule(importedSchedule);
-      setDarkMode(importedDarkMode);
-      setVacationMode(importedVacationMode);
-      setScheduleMode(importedScheduleMode);
+      setCatalogItems(result.items);
+      setCustomModules(result.modules);
       triggerHaptic();
+      const skipped = result.skippedItems > 0 ? ` (${result.skippedItems} ya existían)` : '';
       showToastMsg(
-        'Restauración Exitosa 🎉',
-        `Se cargaron ${importedItems.length} objetos, ${importedModules.length} módulos, ${importedSchedules.length} turnos y ${Object.keys(importedCalendar).length} días de calendario.`
+        'Importación Exitosa 🎉',
+        `Se agregaron ${result.addedItems} objetos${skipped} y ${result.addedModules} módulos nuevos.`
       );
     };
     reader.readAsText(file);
@@ -2650,7 +2608,7 @@ export default function WorkPackerApp() {
             {/* COPIA DE SEGURIDAD */}
             <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
               <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Copia de Seguridad</h3>
-              <p className="text-[11px] text-slate-400">Exporta o importa tus listas, horarios y preferencias en un archivo.</p>
+              <p className="text-[11px] text-slate-400">Exporta o importa tus objetos y módulos. Al importar se suman a los que ya tenés, sin duplicar.</p>
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={exportData}
