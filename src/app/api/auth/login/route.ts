@@ -22,16 +22,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
     }
 
-    // Compare with bcrypt hash
-    const passwordMatch = await bcrypt.compare(password, user.password);
+    // Legacy users may still have a plain-text password; bcrypt hashes start with "$2"
+    const isHashed = user.password.startsWith('$2');
+    const passwordMatch = isHashed
+      ? await bcrypt.compare(password, user.password)
+      : password === user.password;
     if (!passwordMatch) {
       return NextResponse.json({ error: 'Credenciales inválidas' }, { status: 401 });
     }
 
-    // Update last login timestamp
+    // Update last login timestamp, and hash legacy plain-text passwords on the way
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+      data: {
+        lastLoginAt: new Date(),
+        ...(isHashed ? {} : { password: await bcrypt.hash(password, 10) }),
+      },
     });
 
     const token = await createSessionToken({
