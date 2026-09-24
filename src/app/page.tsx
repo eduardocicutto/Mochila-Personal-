@@ -388,8 +388,8 @@ export default function WorkPackerApp() {
   }, [router]);
 
   // Sync to Database on State Change
-  const syncToDatabase = async (overrideData?: any) => {
-    if (!currentUser) return;
+  const syncToDatabase = async (overrideData?: any): Promise<boolean> => {
+    if (!currentUser) return false;
     try {
       const payload = overrideData || {
         settings: {
@@ -407,7 +407,7 @@ export default function WorkPackerApp() {
         reminders,
       };
 
-      await fetch('/api/data', {
+      const res = await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -416,8 +416,10 @@ export default function WorkPackerApp() {
       if (currentUser.role === 'master') {
         fetchAdminData();
       }
+      return res.ok;
     } catch (e) {
       console.error('Failed to sync to database:', e);
+      return false;
     }
   };
 
@@ -982,11 +984,16 @@ export default function WorkPackerApp() {
   const exportData = () => {
     triggerHaptic();
     const backup = {
+      app: 'WorkPacker',
+      version: 2,
+      exportedAt: new Date().toISOString(),
       catalogItems,
       customModules,
       savedSchedules,
       calendarEntries,
+      reminders,
       schedule,
+      scheduleMode,
       darkMode,
       vacationMode,
     };
@@ -1004,22 +1011,84 @@ export default function WorkPackerApp() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
+      let data: any;
       try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.catalogItems) setCatalogItems(data.catalogItems);
-        if (data.customModules) setCustomModules(data.customModules);
-        if (data.savedSchedules) setSavedSchedules(data.savedSchedules);
-        if (data.calendarEntries) setCalendarEntries(data.calendarEntries);
-        if (data.schedule) setSchedule(data.schedule);
-        if (data.darkMode !== undefined) setDarkMode(data.darkMode);
-        if (data.vacationMode !== undefined) setVacationMode(data.vacationMode);
-        syncToDatabase(data);
-        triggerHaptic();
-        showToastMsg('Restauración Exitosa 🎉', 'Todos tus datos y listas han sido cargados.');
+        data = JSON.parse(event.target?.result as string);
       } catch (err) {
         showToastMsg('Error de Archivo', 'El archivo seleccionado no es válido.');
+        return;
       }
+
+      const hasContent = ['catalogItems', 'customModules', 'savedSchedules', 'calendarEntries', 'reminders'].some(
+        (k) => data && data[k]
+      );
+      if (!hasContent) {
+        showToastMsg('Error de Archivo', 'El archivo no es una copia de seguridad de WorkPacker.');
+        return;
+      }
+
+      // Ids are unique across all accounts, so a backup (maybe from another user) gets fresh ones
+      const stamp = Date.now().toString(36);
+      let counter = 0;
+      const freshId = (prefix: string) => `${prefix}_${stamp}_${counter++}`;
+
+      const importedItems: CatalogItem[] = Array.isArray(data.catalogItems)
+        ? data.catalogItems.map((i: CatalogItem) => ({ ...i, id: freshId('item') }))
+        : catalogItems;
+      const importedModules: CustomModule[] = Array.isArray(data.customModules)
+        ? data.customModules.map((m: CustomModule) => ({ ...m, id: freshId('mod') }))
+        : customModules;
+      const importedSchedules: SavedSchedule[] = Array.isArray(data.savedSchedules)
+        ? data.savedSchedules.map((sch: SavedSchedule) => ({ ...sch, id: freshId('sch') }))
+        : savedSchedules;
+      const importedCalendar: Record<string, CalendarEntry> =
+        data.calendarEntries && typeof data.calendarEntries === 'object' ? data.calendarEntries : calendarEntries;
+      // Backups made before reminders existed keep the current reminders
+      const importedReminders: Reminder[] = Array.isArray(data.reminders)
+        ? data.reminders.map((r: Reminder) => ({ ...r, id: freshId('rem') }))
+        : reminders;
+      const importedSchedule: ScheduleSettings = { ...schedule, ...(data.schedule || {}) };
+      const importedDarkMode = typeof data.darkMode === 'boolean' ? data.darkMode : darkMode;
+      const importedVacationMode = typeof data.vacationMode === 'boolean' ? data.vacationMode : vacationMode;
+      const importedScheduleMode = data.scheduleMode === 'calendar' || data.scheduleMode === 'weekly' ? data.scheduleMode : scheduleMode;
+
+      // Save first; the screen only changes once the server has the data
+      const saved = await syncToDatabase({
+        settings: {
+          darkMode: importedDarkMode,
+          vacationMode: importedVacationMode,
+          scheduleMode: importedScheduleMode,
+          activeTab,
+          scheduleSettings: importedSchedule,
+          timezone: getBrowserTimezone(),
+        },
+        catalogItems: importedItems,
+        customModules: importedModules,
+        savedSchedules: importedSchedules,
+        calendarEntries: importedCalendar,
+        reminders: importedReminders,
+      });
+
+      if (!saved) {
+        showToastMsg('Error al Importar', 'No se pudo guardar la copia. Tus datos actuales no se modificaron.');
+        return;
+      }
+
+      setCatalogItems(importedItems);
+      setCustomModules(importedModules);
+      setSavedSchedules(importedSchedules);
+      setCalendarEntries(importedCalendar);
+      setReminders(importedReminders);
+      setSchedule(importedSchedule);
+      setDarkMode(importedDarkMode);
+      setVacationMode(importedVacationMode);
+      setScheduleMode(importedScheduleMode);
+      triggerHaptic();
+      showToastMsg(
+        'Restauración Exitosa 🎉',
+        `Se cargaron ${importedItems.length} objetos, ${importedModules.length} módulos, ${importedSchedules.length} turnos y ${Object.keys(importedCalendar).length} días de calendario.`
+      );
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -2597,7 +2666,7 @@ export default function WorkPackerApp() {
                   <i className="fa-solid fa-upload text-blue-600"></i>
                   <span>Importar Copia</span>
                 </button>
-                <input ref={importFileInputRef} type="file" onChange={importData} className="hidden" accept=".json" />
+                <input ref={importFileInputRef} type="file" onChange={importData} className="hidden" accept=".json,application/json,text/json" />
               </div>
             </div>
           </div>

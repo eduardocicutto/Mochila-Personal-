@@ -134,133 +134,124 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { settings, catalogItems, customModules, savedSchedules, calendarEntries, reminders } = body;
 
-    // 1. Update UserSettings
-    if (settings) {
-      // Keep the migration flag so old night/morning settings are never re-imported as reminders
-      const scheduleSettingsJson = JSON.stringify({ ...(settings.scheduleSettings || {}), remindersMigrated: true });
-      const timezone = typeof settings.timezone === 'string' && settings.timezone ? { timezone: settings.timezone } : {};
-      await prisma.userSettings.upsert({
-        where: { userId },
-        update: {
-          darkMode: settings.darkMode,
-          vacationMode: settings.vacationMode,
-          scheduleMode: settings.scheduleMode,
-          activeTab: settings.activeTab,
-          scheduleSettings: scheduleSettingsJson,
-          ...timezone,
-        },
-        create: {
-          userId,
-          darkMode: settings.darkMode,
-          vacationMode: settings.vacationMode,
-          scheduleMode: settings.scheduleMode,
-          activeTab: settings.activeTab,
-          scheduleSettings: scheduleSettingsJson,
-          ...timezone,
-        },
-      });
-    }
+    // All-or-nothing: if any insert fails, the user's previous data stays intact
+    await prisma.$transaction(
+      async (tx) => {
+        // 1. Update UserSettings
+        if (settings) {
+          // Keep the migration flag so old night/morning settings are never re-imported as reminders
+          const scheduleSettingsJson = JSON.stringify({ ...(settings.scheduleSettings || {}), remindersMigrated: true });
+          const timezone = typeof settings.timezone === 'string' && settings.timezone ? { timezone: settings.timezone } : {};
+          const data = {
+            darkMode: !!settings.darkMode,
+            vacationMode: !!settings.vacationMode,
+            scheduleMode: settings.scheduleMode || 'weekly',
+            activeTab: settings.activeTab || 'home',
+            scheduleSettings: scheduleSettingsJson,
+            ...timezone,
+          };
+          await tx.userSettings.upsert({
+            where: { userId },
+            update: data,
+            create: { userId, ...data },
+          });
+        }
 
-    // 2. Update CatalogItems
-    if (Array.isArray(catalogItems)) {
-      await prisma.catalogItem.deleteMany({ where: { userId } });
-      for (const item of catalogItems) {
-        await prisma.catalogItem.create({
-          data: {
-            id: String(item.id),
-            userId,
-            name: item.name,
-            category: item.category,
-            icon: item.icon,
-            gradientClass: item.gradientClass,
-            packed: !!item.packed,
-          },
-        });
-      }
-    }
+        // 2. Update CatalogItems
+        if (Array.isArray(catalogItems)) {
+          await tx.catalogItem.deleteMany({ where: { userId } });
+          await tx.catalogItem.createMany({
+            data: catalogItems.map((item: any) => ({
+              id: String(item.id),
+              userId,
+              name: item.name,
+              category: item.category,
+              icon: item.icon,
+              gradientClass: item.gradientClass,
+              packed: !!item.packed,
+            })),
+          });
+        }
 
-    // 3. Update CustomModules
-    if (Array.isArray(customModules)) {
-      await prisma.customModule.deleteMany({ where: { userId } });
-      for (const mod of customModules) {
-        await prisma.customModule.create({
-          data: {
-            id: String(mod.id),
-            userId,
-            title: mod.title,
-            subtitle: mod.subtitle || '',
-            icon: mod.icon,
-            colorClass: mod.colorClass,
-            enabled: !!mod.enabled,
-            selectedOption: mod.selectedOption || '',
-            options: JSON.stringify(mod.options || []),
-          },
-        });
-      }
-    }
+        // 3. Update CustomModules
+        if (Array.isArray(customModules)) {
+          await tx.customModule.deleteMany({ where: { userId } });
+          await tx.customModule.createMany({
+            data: customModules.map((mod: any) => ({
+              id: String(mod.id),
+              userId,
+              title: mod.title,
+              subtitle: mod.subtitle || '',
+              icon: mod.icon,
+              colorClass: mod.colorClass,
+              enabled: !!mod.enabled,
+              selectedOption: mod.selectedOption || '',
+              options: JSON.stringify(mod.options || []),
+            })),
+          });
+        }
 
-    // 4. Update SavedSchedules
-    if (Array.isArray(savedSchedules)) {
-      await prisma.savedSchedule.deleteMany({ where: { userId } });
-      for (const sch of savedSchedules) {
-        await prisma.savedSchedule.create({
-          data: {
-            id: String(sch.id),
-            userId,
-            name: sch.name,
-            workDays: JSON.stringify(sch.workDays || []),
-            startTime: sch.startTime,
-            endTime: sch.endTime,
-            colorClass: sch.colorClass,
-            active: !!sch.active,
-          },
-        });
-      }
-    }
+        // 4. Update SavedSchedules
+        if (Array.isArray(savedSchedules)) {
+          await tx.savedSchedule.deleteMany({ where: { userId } });
+          await tx.savedSchedule.createMany({
+            data: savedSchedules.map((sch: any) => ({
+              id: String(sch.id),
+              userId,
+              name: sch.name,
+              workDays: JSON.stringify(sch.workDays || []),
+              startTime: sch.startTime,
+              endTime: sch.endTime,
+              colorClass: sch.colorClass,
+              active: !!sch.active,
+            })),
+          });
+        }
 
-    // 5. Update CalendarEntries
-    if (calendarEntries && typeof calendarEntries === 'object') {
-      await prisma.calendarEntry.deleteMany({ where: { userId } });
-      const entries = Object.entries(calendarEntries) as [
-        string,
-        { isWorkDay: boolean; shiftName?: string; startTime?: string; endTime?: string }
-      ][];
+        // 5. Update CalendarEntries
+        if (calendarEntries && typeof calendarEntries === 'object') {
+          await tx.calendarEntry.deleteMany({ where: { userId } });
+          const entries = Object.entries(calendarEntries) as [
+            string,
+            { isWorkDay: boolean; shiftName?: string; startTime?: string; endTime?: string }
+          ][];
+          await tx.calendarEntry.createMany({
+            data: entries.map(([dateStr, entry]) => ({
+              userId,
+              dateStr,
+              isWorkDay: !!entry.isWorkDay,
+              shiftName: entry.shiftName || '',
+              startTime: entry.startTime || '',
+              endTime: entry.endTime || '',
+            })),
+          });
+        }
 
-      for (const [dateStr, entry] of entries) {
-        await prisma.calendarEntry.create({
-          data: {
-            userId,
-            dateStr,
-            isWorkDay: !!entry.isWorkDay,
-            shiftName: entry.shiftName || '',
-            startTime: entry.startTime || '',
-            endTime: entry.endTime || '',
-          },
-        });
-      }
-    }
-
-    // 6. Update Reminders
-    if (Array.isArray(reminders)) {
-      await prisma.reminder.deleteMany({ where: { userId } });
-      for (const rem of reminders) {
-        const daysBefore = Math.min(MAX_DAYS_BEFORE, Math.max(0, Math.round(Number(rem.daysBefore) || 0)));
-        const time = /^\d{2}:\d{2}$/.test(rem.time) ? rem.time : '21:00';
-        await prisma.reminder.create({
-          data: {
-            id: String(rem.id),
-            userId,
-            daysBefore,
-            time,
-            enabled: !!rem.enabled,
-          },
-        });
-      }
-    }
+        // 6. Update Reminders
+        if (Array.isArray(reminders)) {
+          await tx.reminder.deleteMany({ where: { userId } });
+          await tx.reminder.createMany({
+            data: reminders.map((rem: any) => ({
+              id: String(rem.id),
+              userId,
+              daysBefore: Math.min(MAX_DAYS_BEFORE, Math.max(0, Math.round(Number(rem.daysBefore) || 0))),
+              time: /^\d{2}:\d{2}$/.test(rem.time) ? rem.time : '21:00',
+              enabled: !!rem.enabled,
+            })),
+          });
+        }
+      },
+      { timeout: 20000 }
+    );
 
     return NextResponse.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Data POST error:', err);
-    return NextResponse.json({ error: 'Error al guardar datos' }, { status: 500 });
+    // P2002 = unique constraint: an id already belongs to another record (e.g. a backup from another account)
+    const message =
+      err?.code === 'P2002'
+        ? 'Hay datos con identificadores repetidos; no se guardó ningún cambio'
+        : 'Error al guardar datos';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
