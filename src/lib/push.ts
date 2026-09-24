@@ -3,8 +3,17 @@ import { prisma } from './db';
 
 let configured = false;
 
+// Keys pasted into the Vercel dashboard sometimes keep quotes or trailing spaces
+function cleanEnv(value: string | undefined): string {
+  return (value || '').trim().replace(/^["']|["']$/g, '').trim();
+}
+
+export function getVapidPublicKey(): string {
+  return cleanEnv(process.env.VAPID_PUBLIC_KEY);
+}
+
 export function isPushConfigured(): boolean {
-  return !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  return !!(getVapidPublicKey() && cleanEnv(process.env.VAPID_PRIVATE_KEY));
 }
 
 function ensureConfigured() {
@@ -13,9 +22,9 @@ function ensureConfigured() {
     throw new Error('Faltan las variables VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY');
   }
   webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:admin@workpacker.app',
-    process.env.VAPID_PUBLIC_KEY as string,
-    process.env.VAPID_PRIVATE_KEY as string
+    cleanEnv(process.env.VAPID_SUBJECT) || 'mailto:admin@workpacker.app',
+    getVapidPublicKey(),
+    cleanEnv(process.env.VAPID_PRIVATE_KEY)
   );
   configured = true;
 }

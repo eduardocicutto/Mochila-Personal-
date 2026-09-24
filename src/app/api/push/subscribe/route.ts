@@ -33,9 +33,12 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Push subscribe error:', err);
-    return NextResponse.json({ error: 'Error al registrar el dispositivo' }, { status: 500 });
+    return NextResponse.json(
+      { error: `Error al registrar el dispositivo: ${err?.message || 'desconocido'}` },
+      { status: 500 }
+    );
   }
 }
 

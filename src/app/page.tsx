@@ -132,6 +132,7 @@ export default function WorkPackerApp() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [pushStatus, setPushStatus] = useState<PushStatus>('checking');
   const [pushTesting, setPushTesting] = useState(false);
+  const [pushError, setPushError] = useState('');
 
   // Modals & Form States
   const [showItemModal, setShowItemModal] = useState(false);
@@ -489,6 +490,8 @@ export default function WorkPackerApp() {
       return;
     }
 
+    // Each step is named so a failure on the phone says exactly where it broke
+    let step = 'registrar el service worker';
     try {
       const registration = await navigator.serviceWorker.register('/sw.js');
       await navigator.serviceWorker.ready;
@@ -498,6 +501,7 @@ export default function WorkPackerApp() {
         return;
       }
 
+      step = 'obtener la clave del servidor';
       const keyRes = await fetch('/api/push/public-key');
       if (!keyRes.ok) {
         setPushStatus('unconfigured');
@@ -505,28 +509,44 @@ export default function WorkPackerApp() {
         return;
       }
       const { publicKey } = await keyRes.json();
+      step = 'leer la clave VAPID pública';
+      const serverKey = urlBase64ToUint8Array(publicKey);
 
+      step = 'suscribir el dispositivo al servicio push';
       let subscription = await registration.pushManager.getSubscription();
+      // A subscription made with another VAPID key can't receive our pushes: replace it
+      const existingKey = subscription?.options.applicationServerKey;
+      if (subscription && (!existingKey || new Uint8Array(existingKey).join() !== serverKey.join())) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
+          applicationServerKey: serverKey,
         });
       }
 
+      step = 'guardar el dispositivo en el servidor';
       const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subscription: subscription.toJSON(), timezone: getBrowserTimezone() }),
       });
-      if (!res.ok) throw new Error('subscribe failed');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
 
       setPushStatus('active');
+      setPushError('');
       if (showFeedback) showToastMsg('Avisos Activos ✅', 'Vas a recibir los recordatorios aunque la app esté cerrada.');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Push subscription error:', e);
+      const detail = `Falló al ${step}: ${e?.name && e.name !== 'Error' ? e.name + ' - ' : ''}${e?.message || e}`;
       setPushStatus('inactive');
-      if (showFeedback) showToastMsg('Error', 'No se pudo activar los avisos con la app cerrada.');
+      setPushError(detail);
+      if (showFeedback) showToastMsg('Error', detail);
     }
   };
 
@@ -1963,6 +1983,11 @@ export default function WorkPackerApp() {
                       )
                     )}
                   </div>
+                  {pushError && pushStatus !== 'active' && (
+                    <p className="text-[10px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1 leading-snug break-words">
+                      {pushError}
+                    </p>
+                  )}
                   <p className="text-[10px] text-slate-400 leading-snug">
                     Con la app cerrada suena el tono de notificación del teléfono; el tono de alarma elegido abajo suena con la app abierta.
                   </p>
