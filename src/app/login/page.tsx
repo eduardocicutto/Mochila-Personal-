@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('educicutto');
-  const [password, setPassword] = useState('123456');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -58,51 +58,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Demo Credentials Card */}
-        <div className="space-y-2">
-          <div
-            onClick={() => {
-              setUsername('educicutto');
-              setPassword('123456');
-            }}
-            className="bg-blue-50/80 border border-blue-200/80 hover:bg-blue-100/80 cursor-pointer rounded-2xl p-3 text-xs text-blue-900 flex items-center justify-between shadow-xs transition"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
-                <i className="fa-solid fa-user text-xs"></i>
-              </div>
-              <div>
-                <p className="font-bold text-blue-900">Usuario Personal</p>
-                <p className="text-[11px] text-blue-700 font-mono">
-                  educicutto / 123456
-                </p>
-              </div>
-            </div>
-            <span className="text-[10px] font-semibold text-blue-600 bg-blue-200/60 px-2 py-0.5 rounded-lg">Cargar</span>
-          </div>
-
-          <div
-            onClick={() => {
-              setUsername('master');
-              setPassword('1234');
-            }}
-            className="bg-amber-50/80 border border-amber-200/80 hover:bg-amber-100/80 cursor-pointer rounded-2xl p-3 text-xs text-amber-900 flex items-center justify-between shadow-xs transition"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center">
-                <i className="fa-solid fa-crown text-xs"></i>
-              </div>
-              <div>
-                <p className="font-bold text-amber-900">Usuario Administrador</p>
-                <p className="text-[11px] text-amber-800 font-mono">
-                  master / 1234
-                </p>
-              </div>
-            </div>
-            <span className="text-[10px] font-semibold text-amber-700 bg-amber-200/60 px-2 py-0.5 rounded-lg">Cargar</span>
-          </div>
-        </div>
-
         {/* Error Alert */}
         {error && (
           <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-2xl text-xs flex items-center gap-2 animate-shake">
@@ -127,6 +82,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 placeholder="Nombre de usuario"
+                autoComplete="username"
                 className="w-full bg-white border border-slate-200 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 shadow-xs"
               />
             </div>
@@ -146,6 +102,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="Contraseña"
+                autoComplete="current-password"
                 className="w-full bg-white border border-slate-200 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 shadow-xs"
               />
             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { playAlarmSound, stopAlarmSound, previewAlarmSound } from '@/lib/audio';
 import { Reminder, findDueReminders, reminderDaysLabel, MAX_DAYS_BEFORE } from '@/lib/reminders';
@@ -217,6 +217,11 @@ export default function WorkPackerApp() {
   });
 
   const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Checklist order: null = original order; otherwise ids snapshotted when the arrow was pressed
+  const [checklistOrder, setChecklistOrder] = useState<string[] | null>(null);
+  const checklistItemRefs = useRef(new Map<string, HTMLDivElement>());
+  const checklistPrevRects = useRef(new Map<string, DOMRect>());
 
   // Constants & Presets
   const weekDays = [
@@ -620,10 +625,60 @@ export default function WorkPackerApp() {
 
   const resetChecklist = () => {
     triggerHaptic();
+    captureChecklistPositions();
+    setChecklistOrder(null);
     const updated = catalogItems.map((item) => ({ ...item, packed: false }));
     setCatalogItems(updated);
     syncToDatabase({ catalogItems: updated });
     showToastMsg('Lista Reiniciada', 'Se desmarcaron todos los objetos.');
+  };
+
+  // FLIP animation: remember where each card was, then slide it from there to its new place
+  const captureChecklistPositions = () => {
+    checklistPrevRects.current.clear();
+    checklistItemRefs.current.forEach((el, id) => checklistPrevRects.current.set(id, el.getBoundingClientRect()));
+  };
+
+  useLayoutEffect(() => {
+    const prevRects = checklistPrevRects.current;
+    if (prevRects.size === 0) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!reduceMotion) {
+      checklistItemRefs.current.forEach((el, id) => {
+        const prev = prevRects.get(id);
+        if (!prev) return;
+        const dy = prev.top - el.getBoundingClientRect().top;
+        if (Math.abs(dy) < 1) return;
+        el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], {
+          duration: 450,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        });
+      });
+    }
+    prevRects.clear();
+  }, [checklistOrder]);
+
+  // Unchecked items go to the top; the order stays fixed until the arrow is pressed again
+  const moveUncheckedToTop = () => {
+    triggerHaptic();
+    const items = getFilteredItems();
+    if (!items.some((i) => !i.packed)) {
+      showToastMsg('Todo Listo ✅', 'Ya tildaste todos los objetos.');
+      return;
+    }
+    captureChecklistPositions();
+    setChecklistOrder([...items.filter((i) => !i.packed), ...items.filter((i) => i.packed)].map((i) => String(i.id)));
+  };
+
+  const getChecklistItems = () => {
+    const items = getFilteredItems();
+    if (!checklistOrder) return items;
+    const position = new Map(checklistOrder.map((id, idx) => [id, idx]));
+    // Items added after the snapshot keep their relative order at the end
+    return items
+      .map((item, idx) => ({ item, key: position.get(String(item.id)) ?? checklistOrder.length + idx }))
+      .sort((a, b) => a.key - b.key)
+      .map((entry) => entry.item);
   };
 
   const saveItem = () => {
@@ -1358,17 +1413,33 @@ export default function WorkPackerApp() {
 
             {/* Interactive Checklist */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Lista de Chequeo</h3>
-                <button onClick={resetChecklist} className="text-xs text-blue-600 font-semibold hover:underline flex items-center gap-1">
-                  <i className="fa-solid fa-rotate-left"></i> Desmarcar todo
-                </button>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider truncate min-w-0">Lista de Chequeo</h3>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={moveUncheckedToTop}
+                    title="Subir los objetos sin tildar"
+                    aria-label="Subir los objetos sin tildar"
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs transition active:scale-90 ${
+                      checklistOrder ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    }`}
+                  >
+                    <i className="fa-solid fa-arrow-up"></i>
+                  </button>
+                  <button onClick={resetChecklist} className="text-xs text-blue-600 font-semibold hover:underline flex items-center gap-1 whitespace-nowrap">
+                    <i className="fa-solid fa-rotate-left"></i> Desmarcar todo
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
-                {getFilteredItems().map((item) => (
+                {getChecklistItems().map((item) => (
                   <div
                     key={item.id}
+                    ref={(el) => {
+                      if (el) checklistItemRefs.current.set(String(item.id), el);
+                      else checklistItemRefs.current.delete(String(item.id));
+                    }}
                     onClick={() => toggleItemPacked(item.id)}
                     className={`app-card p-3.5 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98] border ${
                       item.packed ? 'bg-slate-100/70 border-slate-200 opacity-60' : 'bg-white border-slate-200/80 shadow-sm hover:border-blue-200'

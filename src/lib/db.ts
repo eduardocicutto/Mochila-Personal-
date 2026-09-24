@@ -18,6 +18,11 @@ const BCRYPT_ROUNDS = 10;
  */
 export async function seedInitialUser() {
   try {
+    // Solo en una base vacía: si no, renombrar 'master' o 'educicutto' volvería a crear
+    // esas cuentas con las contraseñas por defecto
+    const userCount = await prisma.user.count();
+    if (userCount > 0) return;
+
     // 1. Crear o verificar usuario 'educicutto'
     let eduUser = await prisma.user.findUnique({
       where: { username: 'educicutto' },
