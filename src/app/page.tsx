@@ -3,6 +3,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { playAlarmSound, stopAlarmSound, previewAlarmSound } from '@/lib/audio';
+import { Reminder, findDueReminders, reminderDaysLabel, MAX_DAYS_BEFORE } from '@/lib/reminders';
+
+type PushStatus = 'checking' | 'unsupported' | 'unconfigured' | 'inactive' | 'active';
+
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bytes;
+}
+
+const getBrowserTimezone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (e) {
+    return undefined;
+  }
+};
 
 // Interfaces
 interface CatalogItem {
@@ -110,6 +129,9 @@ export default function WorkPackerApp() {
   const [showAlarmModal, setShowAlarmModal] = useState(false);
   const [activeAlarmData, setActiveAlarmData] = useState<{ title: string; message: string } | null>(null);
   const [firedAlarmKeys, setFiredAlarmKeys] = useState<Record<string, number>>({});
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [pushStatus, setPushStatus] = useState<PushStatus>('checking');
+  const [pushTesting, setPushTesting] = useState(false);
 
   // Modals & Form States
   const [showItemModal, setShowItemModal] = useState(false);
@@ -337,7 +359,11 @@ export default function WorkPackerApp() {
           if (dbData.customModules) setCustomModules(dbData.customModules);
           if (dbData.savedSchedules) setSavedSchedules(dbData.savedSchedules);
           if (dbData.calendarEntries) setCalendarEntries(dbData.calendarEntries);
+          if (dbData.reminders) setReminders(dbData.reminders);
         }
+
+        // Register this device for push reminders (works with the app closed)
+        syncPushSubscription(false);
       } catch (err) {
         console.error('Error loading data:', err);
       } finally {
@@ -371,11 +397,13 @@ export default function WorkPackerApp() {
           scheduleMode,
           activeTab,
           scheduleSettings: schedule,
+          timezone: getBrowserTimezone(),
         },
         catalogItems,
         customModules,
         savedSchedules,
         calendarEntries,
+        reminders,
       };
 
       await fetch('/api/data', {
@@ -392,116 +420,54 @@ export default function WorkPackerApp() {
     }
   };
 
-  // Alarm engine loop
+  // Alarm engine loop (app open): plays the sound and shows the modal at each reminder time.
+  // With the app closed, the same reminders arrive as push notifications from /api/cron/reminders.
   useEffect(() => {
     if (loading || !currentUser) return;
 
     const checkAlarms = () => {
       if (vacationMode) return;
       const now = new Date();
-      const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const nowDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      // Calculate upcoming alarms
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const due = findDueReminders({
+        userId: currentUser.id,
+        nowDateStr,
+        nowMinutes: now.getHours() * 60 + now.getMinutes(),
+        reminders,
+        calendarEntries,
+        schedules: savedSchedules,
+        windowMinutes: 1,
+      });
 
-      const formatDateStr = (d: Date) =>
-        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      due.forEach((alarm) => {
+        if (firedAlarmKeys[alarm.key]) return;
 
-      const tStr = formatDateStr(today);
-      const tmStr = formatDateStr(tomorrow);
+        const newFired = { ...firedAlarmKeys, [alarm.key]: Date.now() };
+        setFiredAlarmKeys(newFired);
+        localStorage.setItem('workpacker_fired_alarms', JSON.stringify(newFired));
 
-      let tomorrowIsWorkDay = false;
-      let tomorrowShiftName = '';
+        // Trigger Alarm Audio & Modal
+        playAlarmSound(schedule.alarmSound, schedule.alarmVolume);
+        setIsAlarmPlaying(true);
 
-      if (calendarEntries[tmStr]) {
-        tomorrowIsWorkDay = !!calendarEntries[tmStr].isWorkDay;
-        tomorrowShiftName = calendarEntries[tmStr].shiftName || 'Turno';
-      } else {
-        const activeSchedules = savedSchedules.filter((s) => s.active);
-        const matched = activeSchedules.find((s) => s.workDays.includes(tomorrow.getDay()));
-        if (matched) {
-          tomorrowIsWorkDay = true;
-          tomorrowShiftName = matched.name;
+        if (schedule.alarmVibrate && navigator.vibrate) {
+          navigator.vibrate([300, 100, 300, 100, 300, 100, 300]);
         }
-      }
 
-      let todayIsWorkDay = false;
-      let todayShiftName = '';
-      let todayStartTime = '';
-
-      if (calendarEntries[tStr]) {
-        todayIsWorkDay = !!calendarEntries[tStr].isWorkDay;
-        todayShiftName = calendarEntries[tStr].shiftName || 'Turno';
-        todayStartTime = calendarEntries[tStr].startTime || '';
-      } else {
-        const activeSchedules = savedSchedules.filter((s) => s.active);
-        const matched = activeSchedules.find((s) => s.workDays.includes(today.getDay()));
-        if (matched) {
-          todayIsWorkDay = true;
-          todayShiftName = matched.name;
-          todayStartTime = matched.startTime;
+        // When push is active the server already sends the system notification
+        if (pushStatus !== 'active' && Notification.permission === 'granted') {
+          try {
+            new Notification(alarm.title, {
+              body: alarm.body,
+              icon: '/icon-192.png',
+            });
+          } catch (e) {}
         }
-      }
 
-      const alarms: { id: string; date: string; time: string; title: string; message: string }[] = [];
-
-      if (tomorrowIsWorkDay && schedule.notifyDayBefore) {
-        schedule.nightNotifyTimes.forEach((time, idx) => {
-          alarms.push({
-            id: `night_${idx}_${tStr}`,
-            date: tStr,
-            time: time,
-            title: `🌙 Mañana Trabajas — ${tomorrowShiftName}`,
-            message: '¡Prepara tu mochila esta noche! Revisa tu lista de chequeo en WorkPacker.',
-          });
-        });
-      }
-
-      if (todayIsWorkDay && schedule.notifySameDay) {
-        schedule.morningNotifyTimes.forEach((time, idx) => {
-          const entryText = todayStartTime ? ` Entras a las ${todayStartTime}.` : '';
-          alarms.push({
-            id: `morning_${idx}_${tStr}`,
-            date: tStr,
-            time: time,
-            title: `☀️ Hoy Trabajas — ${todayShiftName}`,
-            message: `¡Revisa tu mochila antes de salir!${entryText} Abre WorkPacker y chequea tu lista.`,
-          });
-        });
-      }
-
-      alarms.forEach((alarm) => {
-        if (alarm.time === currentTimeStr && alarm.date === todayStr && !firedAlarmKeys[alarm.id]) {
-          const newFired = { ...firedAlarmKeys, [alarm.id]: Date.now() };
-          setFiredAlarmKeys(newFired);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('workpacker_fired_alarms', JSON.stringify(newFired));
-          }
-
-          // Trigger Alarm Audio & Modal
-          playAlarmSound(schedule.alarmSound, schedule.alarmVolume);
-          setIsAlarmPlaying(true);
-
-          if (schedule.alarmVibrate && navigator.vibrate) {
-            navigator.vibrate([300, 100, 300, 100, 300, 100, 300]);
-          }
-
-          if (Notification.permission === 'granted') {
-            try {
-              new Notification(alarm.title, {
-                body: alarm.message,
-                icon: '/icon-192.png',
-              });
-            } catch (e) {}
-          }
-
-          setActiveAlarmData({ title: alarm.title, message: alarm.message });
-          setShowAlarmModal(true);
-          showToastMsg(alarm.title, alarm.message);
-        }
+        setActiveAlarmData({ title: alarm.title, message: alarm.body });
+        setShowAlarmModal(true);
+        showToastMsg(alarm.title, alarm.body);
       });
     };
 
@@ -509,7 +475,95 @@ export default function WorkPackerApp() {
     checkAlarms();
 
     return () => clearInterval(interval);
-  }, [loading, currentUser, vacationMode, calendarEntries, savedSchedules, schedule, firedAlarmKeys]);
+  }, [loading, currentUser, vacationMode, calendarEntries, savedSchedules, schedule, reminders, pushStatus, firedAlarmKeys]);
+
+  // Push subscription: registers the service worker and this device on the server
+  const syncPushSubscription = async (showFeedback: boolean) => {
+    if (
+      typeof window === 'undefined' ||
+      !('serviceWorker' in navigator) ||
+      !('PushManager' in window) ||
+      !('Notification' in window)
+    ) {
+      setPushStatus('unsupported');
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      if (Notification.permission !== 'granted') {
+        setPushStatus('inactive');
+        return;
+      }
+
+      const keyRes = await fetch('/api/push/public-key');
+      if (!keyRes.ok) {
+        setPushStatus('unconfigured');
+        if (showFeedback) showToastMsg('Push no disponible', 'El servidor todavía no tiene configuradas las claves VAPID.');
+        return;
+      }
+      const { publicKey } = await keyRes.json();
+
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
+      }
+
+      const res = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: subscription.toJSON(), timezone: getBrowserTimezone() }),
+      });
+      if (!res.ok) throw new Error('subscribe failed');
+
+      setPushStatus('active');
+      if (showFeedback) showToastMsg('Avisos Activos ✅', 'Vas a recibir los recordatorios aunque la app esté cerrada.');
+    } catch (e) {
+      console.error('Push subscription error:', e);
+      setPushStatus('inactive');
+      if (showFeedback) showToastMsg('Error', 'No se pudo activar los avisos con la app cerrada.');
+    }
+  };
+
+  const sendTestPush = async () => {
+    setPushTesting(true);
+    try {
+      const res = await fetch('/api/push/test', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToastMsg('Prueba Enviada 📲', 'Cerrá la app: la notificación tendría que aparecer igual.');
+      } else {
+        showToastMsg('Error', data.error || 'No se pudo enviar la prueba.');
+      }
+    } catch (e) {
+      showToastMsg('Error', 'Error de conexión.');
+    } finally {
+      setPushTesting(false);
+    }
+  };
+
+  // Reminder handlers
+  const updateReminders = (updated: Reminder[]) => {
+    setReminders(updated);
+    syncToDatabase({ reminders: updated });
+  };
+
+  const addReminder = () => {
+    updateReminders([...reminders, { id: `rem_${Date.now()}`, daysBefore: 1, time: '20:00', enabled: true }]);
+  };
+
+  const patchReminder = (id: string, patch: Partial<Reminder>) => {
+    updateReminders(reminders.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  };
+
+  const deleteReminder = (id: string) => {
+    updateReminders(reminders.filter((r) => r.id !== id));
+  };
 
   // Request Notification Permission
   const requestNotificationPermission = async () => {
@@ -522,7 +576,7 @@ export default function WorkPackerApp() {
       const res = await Notification.requestPermission();
       setNotificationPermission(res);
       if (res === 'granted') {
-        showToastMsg('Notificaciones Activas ✅', '¡Perfecto! Ahora recibirás tus alarmas de trabajo.');
+        await syncPushSubscription(true);
       } else {
         showToastMsg('Permiso Denegado', 'Las notificaciones están bloqueadas en tu navegador.');
       }
@@ -1685,6 +1739,97 @@ export default function WorkPackerApp() {
               </div>
             )}
 
+            {/* Automatic Reminders */}
+            <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Recordatorios Automáticos</h3>
+                  <p className="text-[11px] text-slate-400">Elegí cuántos días antes de trabajar y a qué hora avisarte</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addReminder}
+                  className="text-blue-600 hover:text-blue-700 text-xs font-semibold flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-lg hover:bg-blue-100 transition shrink-0"
+                >
+                  <i className="fa-solid fa-plus text-[10px]"></i>
+                  <span>Agregar</span>
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {reminders.map((rem) => (
+                  <div
+                    key={rem.id}
+                    className={`p-2.5 rounded-2xl border flex items-center gap-2 transition ${
+                      rem.enabled ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-slate-50/50 opacity-60'
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs shrink-0 ${
+                        rem.daysBefore === 0 ? 'grad-amber' : 'grad-lavender'
+                      }`}
+                    >
+                      <i className={rem.daysBefore === 0 ? 'fa-solid fa-sun' : 'fa-solid fa-moon'}></i>
+                    </div>
+
+                    <select
+                      value={rem.daysBefore}
+                      onChange={(e) => patchReminder(rem.id, { daysBefore: Number(e.target.value) })}
+                      className="flex-1 min-w-0 bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                    >
+                      {Array.from({ length: MAX_DAYS_BEFORE + 1 }, (_, n) => (
+                        <option key={n} value={n}>
+                          {reminderDaysLabel(n)}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="time"
+                      value={rem.time}
+                      onChange={(e) => e.target.value && patchReminder(rem.id, { time: e.target.value })}
+                      className="bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => patchReminder(rem.id, { enabled: !rem.enabled })}
+                      title={rem.enabled ? 'Desactivar' : 'Activar'}
+                      className={`w-10 h-6 rounded-full p-0.5 transition duration-200 flex items-center shrink-0 ${
+                        rem.enabled ? 'bg-emerald-500' : 'bg-slate-300'
+                      }`}
+                    >
+                      <div
+                        className={`w-5 h-5 bg-white rounded-full shadow-md transition duration-200 ${
+                          rem.enabled ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      ></div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteReminder(rem.id)}
+                      title="Eliminar"
+                      className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center text-xs transition shrink-0"
+                    >
+                      <i className="fa-solid fa-trash text-xs"></i>
+                    </button>
+                  </div>
+                ))}
+
+                {reminders.length === 0 && (
+                  <div className="text-center py-4 text-slate-400 bg-slate-50 rounded-2xl border border-slate-200/60">
+                    <i className="fa-regular fa-bell-slash text-xl mb-1 opacity-40"></i>
+                    <p className="text-xs">No tenés recordatorios. Tocá “Agregar” para crear uno.</p>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[10px] text-slate-400 leading-snug">
+                Solo avisa si ese día es laboral según tus turnos activos o el calendario. En modo vacaciones no se envían avisos.
+              </p>
+            </div>
+
             {/* Alarm & Sound Configuration */}
             <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
               <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Configuración de Alarma</h3>
@@ -1771,6 +1916,58 @@ export default function WorkPackerApp() {
                   </div>
                 )}
               </div>
+
+              {/* Push (app closed) Status */}
+              {notificationPermission === 'granted' && (
+                <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <i
+                        className={`fa-solid fa-mobile-screen-button text-sm ${
+                          pushStatus === 'active' ? 'text-emerald-600' : 'text-slate-400'
+                        }`}
+                      ></i>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-slate-700">Avisos con la app cerrada</h4>
+                        <p className="text-[11px] text-slate-500">
+                          {pushStatus === 'active'
+                            ? 'Activos en este dispositivo'
+                            : pushStatus === 'unsupported'
+                            ? 'Este navegador no los soporta (en iPhone: instalá la app en el inicio)'
+                            : pushStatus === 'unconfigured'
+                            ? 'Falta configurar el servidor'
+                            : pushStatus === 'checking'
+                            ? 'Verificando...'
+                            : 'No activados en este dispositivo'}
+                        </p>
+                      </div>
+                    </div>
+                    {pushStatus === 'active' ? (
+                      <button
+                        type="button"
+                        onClick={sendTestPush}
+                        disabled={pushTesting}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-100 hover:bg-blue-200 text-blue-700 transition shrink-0 disabled:opacity-50"
+                      >
+                        {pushTesting ? 'Enviando...' : 'Probar'}
+                      </button>
+                    ) : (
+                      pushStatus === 'inactive' && (
+                        <button
+                          type="button"
+                          onClick={() => syncPushSubscription(true)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-200 hover:bg-amber-300 text-amber-800 transition shrink-0"
+                        >
+                          Activar
+                        </button>
+                      )
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-snug">
+                    Con la app cerrada suena el tono de notificación del teléfono; el tono de alarma elegido abajo suena con la app abierta.
+                  </p>
+                </div>
+              )}
 
               {/* Alarm Sound Selector */}
               <div className="space-y-2">

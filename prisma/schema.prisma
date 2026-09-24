@@ -8,18 +8,21 @@ generator client {
 }
 
 model User {
-  id              String          @id @default(uuid())
-  username        String          @unique
-  password        String
-  role            String          @default("user")
-  lastLoginAt     DateTime?       @map("last_login_at")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  settings        UserSettings?
-  catalogItems    CatalogItem[]
-  customModules   CustomModule[]
-  savedSchedules  SavedSchedule[]
-  calendarEntries CalendarEntry[]
+  id                String             @id @default(uuid())
+  username          String             @unique
+  password          String
+  role              String             @default("user")
+  lastLoginAt       DateTime?          @map("last_login_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  settings          UserSettings?
+  catalogItems      CatalogItem[]
+  customModules     CustomModule[]
+  savedSchedules    SavedSchedule[]
+  calendarEntries   CalendarEntry[]
+  reminders         Reminder[]
+  pushSubscriptions PushSubscription[]
+  notificationLogs  NotificationLog[]
 
   @@map("users")
 }
@@ -33,6 +36,7 @@ model UserSettings {
   scheduleMode     String  @default("weekly") @map("schedule_mode")
   activeTab        String  @default("home") @map("active_tab")
   scheduleSettings String  @default("{}") @map("schedule_settings")
+  timezone         String  @default("America/Argentina/Buenos_Aires")
 
   @@map("user_settings")
 }
@@ -91,4 +95,43 @@ model CalendarEntry {
 
   @@unique([userId, dateStr])
   @@map("calendar_entries")
+}
+
+// Recordatorio de trabajo: avisa `daysBefore` días antes de cada día laboral, a la hora `time` (HH:MM, hora local del usuario)
+model Reminder {
+  id         String  @id @default(uuid())
+  userId     String  @map("user_id")
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  daysBefore Int     @default(1) @map("days_before")
+  time       String  @default("21:00")
+  enabled    Boolean @default(true)
+
+  @@index([userId])
+  @@map("reminders")
+}
+
+// Suscripción Web Push de un dispositivo (permite notificar con la app cerrada)
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// Registro de avisos ya enviados, para no repetir el mismo recordatorio
+model NotificationLog {
+  id     String   @id @default(uuid())
+  userId String   @map("user_id")
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key    String   @unique
+  sentAt DateTime @default(now()) @map("sent_at")
+
+  @@index([userId])
+  @@map("notification_logs")
 }

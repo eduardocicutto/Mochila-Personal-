@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { DEFAULT_REMINDERS, MAX_DAYS_BEFORE } from '@/lib/reminders';
 
 export async function GET() {
   try {
@@ -70,6 +71,37 @@ export async function GET() {
       } catch (e) {}
     }
 
+    let reminders = await prisma.reminder.findMany({
+      where: { userId },
+      orderBy: [{ daysBefore: 'desc' }, { time: 'asc' }],
+    });
+
+    // First load after reminders became their own table: carry over the old night/morning settings
+    const settingsJson = (() => {
+      try {
+        return JSON.parse(userSettings?.scheduleSettings || '{}');
+      } catch (e) {
+        return {};
+      }
+    })();
+    if (reminders.length === 0 && !settingsJson.remindersMigrated) {
+      const legacy = [
+        ...scheduleSettings.nightNotifyTimes.map((time) => ({ daysBefore: 1, time, enabled: scheduleSettings.notifyDayBefore })),
+        ...scheduleSettings.morningNotifyTimes.map((time) => ({ daysBefore: 0, time, enabled: scheduleSettings.notifySameDay })),
+      ];
+      const initial = legacy.length > 0 ? legacy : DEFAULT_REMINDERS;
+      await prisma.reminder.createMany({ data: initial.map((r) => ({ ...r, userId })) });
+      await prisma.userSettings.upsert({
+        where: { userId },
+        update: { scheduleSettings: JSON.stringify({ ...settingsJson, remindersMigrated: true }) },
+        create: { userId, scheduleSettings: JSON.stringify({ remindersMigrated: true }) },
+      });
+      reminders = await prisma.reminder.findMany({
+        where: { userId },
+        orderBy: [{ daysBefore: 'desc' }, { time: 'asc' }],
+      });
+    }
+
     return NextResponse.json({
       user: sessionUser,
       settings: {
@@ -83,6 +115,7 @@ export async function GET() {
       customModules,
       savedSchedules,
       calendarEntries: calendarEntriesMap,
+      reminders: reminders.map((r) => ({ id: r.id, daysBefore: r.daysBefore, time: r.time, enabled: r.enabled })),
     });
   } catch (err) {
     console.error('Data GET error:', err);
@@ -99,10 +132,13 @@ export async function POST(request: Request) {
 
     const userId = sessionUser.id;
     const body = await request.json();
-    const { settings, catalogItems, customModules, savedSchedules, calendarEntries } = body;
+    const { settings, catalogItems, customModules, savedSchedules, calendarEntries, reminders } = body;
 
     // 1. Update UserSettings
     if (settings) {
+      // Keep the migration flag so old night/morning settings are never re-imported as reminders
+      const scheduleSettingsJson = JSON.stringify({ ...(settings.scheduleSettings || {}), remindersMigrated: true });
+      const timezone = typeof settings.timezone === 'string' && settings.timezone ? { timezone: settings.timezone } : {};
       await prisma.userSettings.upsert({
         where: { userId },
         update: {
@@ -110,7 +146,8 @@ export async function POST(request: Request) {
           vacationMode: settings.vacationMode,
           scheduleMode: settings.scheduleMode,
           activeTab: settings.activeTab,
-          scheduleSettings: JSON.stringify(settings.scheduleSettings || {}),
+          scheduleSettings: scheduleSettingsJson,
+          ...timezone,
         },
         create: {
           userId,
@@ -118,7 +155,8 @@ export async function POST(request: Request) {
           vacationMode: settings.vacationMode,
           scheduleMode: settings.scheduleMode,
           activeTab: settings.activeTab,
-          scheduleSettings: JSON.stringify(settings.scheduleSettings || {}),
+          scheduleSettings: scheduleSettingsJson,
+          ...timezone,
         },
       });
     }
@@ -197,6 +235,24 @@ export async function POST(request: Request) {
             shiftName: entry.shiftName || '',
             startTime: entry.startTime || '',
             endTime: entry.endTime || '',
+          },
+        });
+      }
+    }
+
+    // 6. Update Reminders
+    if (Array.isArray(reminders)) {
+      await prisma.reminder.deleteMany({ where: { userId } });
+      for (const rem of reminders) {
+        const daysBefore = Math.min(MAX_DAYS_BEFORE, Math.max(0, Math.round(Number(rem.daysBefore) || 0)));
+        const time = /^\d{2}:\d{2}$/.test(rem.time) ? rem.time : '21:00';
+        await prisma.reminder.create({
+          data: {
+            id: String(rem.id),
+            userId,
+            daysBefore,
+            time,
+            enabled: !!rem.enabled,
           },
         });
       }
