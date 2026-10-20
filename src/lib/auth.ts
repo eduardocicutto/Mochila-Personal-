@@ -43,7 +43,16 @@ export async function getAuthenticatedUser(): Promise<UserPayload | null> {
   const token = cookieStore.get(COOKIE_NAME)?.value;
 
   if (!token) return null;
-  return await verifySessionToken(token);
+  const session = await verifySessionToken(token);
+  if (!session) return null;
+
+  // The token can outlive the user row (account recreated or deleted): saving with a stale id
+  // fails on the foreign key and reading returns nothing, so always resolve the real user
+  const user =
+    (await prisma.user.findUnique({ where: { id: session.id } })) ||
+    (session.username ? await prisma.user.findUnique({ where: { username: session.username } }) : null);
+  if (!user) return null;
+  return { id: user.id, username: user.username, role: user.role };
 }
 
 export function setSessionCookie(token: string) {

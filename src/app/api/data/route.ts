@@ -248,10 +248,13 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error('Data POST error:', err);
     // P2002 = unique constraint: an id already belongs to another record (e.g. a backup from another account)
+    // P2003 = foreign key: the session's user no longer exists in the database
     const message =
       err?.code === 'P2002'
         ? 'Hay datos con identificadores repetidos; no se guardó ningún cambio'
-        : 'Error al guardar datos';
+        : err?.code === 'P2003'
+          ? 'Tu usuario no existe en la base; cerrá sesión y volvé a entrar'
+          : `Error al guardar datos${err?.code ? ` (${err.code})` : ''}`;
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

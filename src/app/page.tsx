@@ -1089,9 +1089,22 @@ export default function WorkPackerApp() {
       }
 
       // Save first; the screen only changes once the server has the data
-      const saved = await syncToDatabase({ catalogItems: result.items, customModules: result.modules });
-      if (!saved) {
-        showToastMsg('Error al Importar', 'No se pudo guardar la copia. Tus datos actuales no se modificaron.');
+      let reason = '';
+      try {
+        const res = await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ catalogItems: result.items, customModules: result.modules }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          reason = res.status === 401 ? 'Tu sesión venció, volvé a iniciar sesión' : body.error || `Error ${res.status}`;
+        }
+      } catch (err) {
+        reason = 'Sin conexión con el servidor';
+      }
+      if (reason) {
+        showToastMsg('Error al Importar', `No se pudo guardar la copia (${reason}). Tus datos actuales no se modificaron.`);
         return;
       }
 
