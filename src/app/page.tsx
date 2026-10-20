@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { playAlarmSound, stopAlarmSound, previewAlarmSound } from '@/lib/audio';
 import { Reminder, findDueReminders, reminderDaysLabel, MAX_DAYS_BEFORE } from '@/lib/reminders';
-import { mergeBackup } from '@/lib/backup';
+import { mergeBackup, parseBackup } from '@/lib/backup';
 
 type PushStatus = 'checking' | 'unsupported' | 'unconfigured' | 'inactive' | 'active';
 
@@ -1046,13 +1046,16 @@ export default function WorkPackerApp() {
       catalogItems,
       customModules,
     };
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backup, null, 2));
+    // A Blob avoids the size limit and odd MIME type of data: URLs on Android
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('href', url);
     downloadAnchor.setAttribute('download', `WorkPacker_Copia_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToastMsg('Copia Creada 💾', `Se descargaron ${catalogItems.length} objetos y ${customModules.length} módulos.`);
   };
 
@@ -1061,16 +1064,14 @@ export default function WorkPackerApp() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
-      let data: any;
-      try {
-        data = JSON.parse(event.target?.result as string);
-      } catch (err) {
+      const parsed = parseBackup(String(event.target?.result || ''));
+      if (!parsed) {
         showToastMsg('Error de Archivo', 'El archivo seleccionado no es válido.');
         return;
       }
 
-      const backupItems: CatalogItem[] = Array.isArray(data?.catalogItems) ? data.catalogItems : [];
-      const backupModules: CustomModule[] = Array.isArray(data?.customModules) ? data.customModules : [];
+      const backupItems: CatalogItem[] = parsed.items;
+      const backupModules: CustomModule[] = parsed.modules;
       if (backupItems.length === 0 && backupModules.length === 0) {
         showToastMsg('Error de Archivo', 'El archivo no tiene objetos ni módulos de WorkPacker.');
         return;
@@ -1103,7 +1104,8 @@ export default function WorkPackerApp() {
         `Se agregaron ${result.addedItems} objetos${skipped} y ${result.addedModules} módulos nuevos.`
       );
     };
-    reader.readAsText(file);
+    reader.onerror = () => showToastMsg('Error de Archivo', 'No se pudo leer el archivo seleccionado.');
+    reader.readAsText(file, 'utf-8');
     e.target.value = '';
   };
 
@@ -2695,7 +2697,7 @@ export default function WorkPackerApp() {
                   <i className="fa-solid fa-upload text-blue-600"></i>
                   <span>Importar Copia</span>
                 </button>
-                <input ref={importFileInputRef} type="file" onChange={importData} className="hidden" accept=".json,application/json,text/json" />
+                <input ref={importFileInputRef} type="file" onChange={importData} className="hidden" />
               </div>
             </div>
           </div>

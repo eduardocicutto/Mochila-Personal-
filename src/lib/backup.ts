@@ -38,6 +38,76 @@ export interface MergeResult<I, M> {
 
 const normalize = (text: string) => (text || '').trim().toLowerCase();
 
+const asText = (value: unknown, fallback: string) =>
+  typeof value === 'string' && value.trim() ? value : typeof value === 'number' ? String(value) : fallback;
+
+const asArray = (value: unknown): any[] => {
+  if (Array.isArray(value)) return value;
+  // Some backups store lists as JSON strings (e.g. module options straight from the DB)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
+
+/**
+ * Lee el texto de un archivo de copia (versiones nuevas y viejas) y devuelve objetos y módulos
+ * con todos los campos obligatorios completos, para que el servidor no rechace la copia.
+ * Devuelve null si el archivo no es JSON.
+ */
+export function parseBackup(text: string): { items: BackupItem[]; modules: BackupModule[] } | null {
+  let data: any;
+  try {
+    // Strip a BOM or stray whitespace some phones add when saving the download
+    data = JSON.parse(text.replace(/^﻿/, '').trim());
+    // A backup re-saved as text can end up as a JSON string holding the JSON
+    if (typeof data === 'string') data = JSON.parse(data);
+  } catch (e) {
+    return null;
+  }
+  if (!data || typeof data !== 'object') return null;
+  // Accept the lists at the top level or wrapped in a "data" object
+  const source = data.catalogItems || data.customModules ? data : data.data || {};
+
+  const modules: BackupModule[] = asArray(source.customModules)
+    .filter((m) => m && typeof m === 'object' && asText(m.title, ''))
+    .map((m, i) => ({
+      id: asText(m.id, `mod_${i}`),
+      title: asText(m.title, ''),
+      subtitle: asText(m.subtitle, ''),
+      icon: asText(m.icon, 'fa-solid fa-layer-group'),
+      colorClass: asText(m.colorClass, 'grad-sky'),
+      enabled: m.enabled !== false,
+      selectedOption: asText(m.selectedOption, ''),
+      options: asArray(m.options)
+        .filter((o) => o && typeof o === 'object' && asText(o.name, ''))
+        .map((o, j) => ({
+          id: asText(o.id, `opt_${i}_${j}`),
+          name: asText(o.name, ''),
+          icon: asText(o.icon, 'fa-solid fa-check'),
+          enabled: o.enabled !== false,
+        })),
+    }));
+
+  const items: BackupItem[] = asArray(source.catalogItems)
+    .filter((it) => it && typeof it === 'object' && asText(it.name, ''))
+    .map((it, i) => ({
+      id: asText(it.id, `item_${i}`),
+      name: asText(it.name, ''),
+      category: asText(it.category, 'essential'),
+      icon: asText(it.icon, 'fa-solid fa-box'),
+      gradientClass: asText(it.gradientClass, 'grad-sky'),
+      packed: !!it.packed,
+    }));
+
+  return { items, modules };
+}
+
 /**
  * Suma los módulos y objetos de la copia a los actuales.
  * - Un módulo con el mismo título se une al existente (se agregan solo las opciones que falten).
