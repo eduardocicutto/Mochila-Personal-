@@ -109,6 +109,8 @@ export default function WorkPackerApp() {
 
   // Loading & Auth State
   const [loading, setLoading] = useState(true);
+  // If the first load fails the screen is empty: saving then would wipe the real data on the server
+  const dataLoadFailed = useRef(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string } | null>(null);
 
   // App Main States
@@ -367,6 +369,9 @@ export default function WorkPackerApp() {
           if (dbData.savedSchedules) setSavedSchedules(dbData.savedSchedules);
           if (dbData.calendarEntries) setCalendarEntries(dbData.calendarEntries);
           if (dbData.reminders) setReminders(dbData.reminders);
+        } else {
+          dataLoadFailed.current = true;
+          showToastMsg('Sin Conexión 🔌', 'No se pudo cargar tu mochila desde la base de datos. Tus datos no se borraron; los cambios no se guardarán hasta que vuelva.');
         }
 
         // Register this device for push reminders (works with the app closed)
@@ -395,7 +400,7 @@ export default function WorkPackerApp() {
 
   // Sync to Database on State Change
   const syncToDatabase = async (overrideData?: any): Promise<boolean> => {
-    if (!currentUser) return false;
+    if (!currentUser || dataLoadFailed.current) return false;
     try {
       const payload = overrideData || {
         settings: {
@@ -1089,6 +1094,11 @@ export default function WorkPackerApp() {
       }
 
       // Save first; the screen only changes once the server has the data
+      if (dataLoadFailed.current) {
+        showToastMsg('Error al Importar', 'La base de datos no responde. Probá de nuevo cuando vuelva; tus datos no se borraron.');
+        return;
+      }
+
       let reason = '';
       try {
         const res = await fetch('/api/data', {
